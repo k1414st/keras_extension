@@ -20,6 +20,7 @@ setup(
     author_email='k1414st@gmail.com',
     license=license,
     packages=find_packages(exclude=('tests', 'docs')),
-    install_requires=['tensorflow', 'keras'],
+    # install_requires=['tensorflow', 'keras'],
+    install_requires=['keras'],
 )
 
