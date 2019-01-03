@@ -19,7 +19,7 @@ python setup.py install
 ```
 
 #### sample code
-You can easily use PartialConv2D instead of Conv2D
+You can easily use PartialConv2D instead of Conv2D.
 ```
 import numpy as np
 import tensorflow as tf
