@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from .context import sample
+# from .context import sample
+from keras_extention.layers import PartialConv2D
 
 import unittest
 
