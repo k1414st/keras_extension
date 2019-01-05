@@ -372,7 +372,7 @@ class PartialConv1D(_Conv):
     def __init__(self, filters,
                  kernel_size,
                  strides=1,
-                 padding=None,
+                 padding=None,  # for compatibility with Conv2D (warned)
                  data_format='channels_last',
                  dilation_rate=1,
                  activation=None,
@@ -386,8 +386,8 @@ class PartialConv1D(_Conv):
                  bias_constraint=None,
                  **kwargs):
         if padding is not None:
-            warnings.warn('padding option is not used at PartialConv modules.')
-        super(Conv1D, self).__init__(
+            warnings.warn('padding option is not used at PartialConv modules, ignored.')
+        super(PartialConv1D, self).__init__(
             rank=1,
             filters=filters,
             kernel_size=kernel_size,
@@ -515,8 +515,7 @@ class PartialConv2D(_Conv):
                  bias_constraint=None,
                  **kwargs):
         if padding is not None:
-            warnings.warn('padding option is not used at PartialConv modules.')
-
+            warnings.warn('padding option is not used at PartialConv modules, ignored.')
         super(PartialConv2D, self).__init__(
             rank=2,
             filters=filters,
@@ -632,7 +631,7 @@ class PartialConv3D(_Conv):
     def __init__(self, filters,
                  kernel_size,
                  strides=(1, 1, 1),
-                 padding=None,
+                 padding=None,  # for compatibility with Conv2D (warned)
                  data_format=None,
                  dilation_rate=(1, 1, 1),
                  activation=None,
@@ -646,8 +645,8 @@ class PartialConv3D(_Conv):
                  bias_constraint=None,
                  **kwargs):
         if padding is not None:
-            warnings.warn('padding option is not used at PartialConv modules.')
-        super(Conv3D, self).__init__(
+            warnings.warn('padding option is not used at PartialConv modules, ignored.')
+        super(PartialConv3D, self).__init__(
             rank=3,
             filters=filters,
             kernel_size=kernel_size,
