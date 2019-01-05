@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 Partial Convolutional layers.
--- from "Partial Convolutional based Padding" (https://arxiv.org/abs/1811.11718)
+This module is implementation of "Partial Convolutional based Padding"
+(https://arxiv.org/abs/1811.11718)
 """
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import warnings
 import keras.backend as K
 from keras import activations
 from keras import initializers
@@ -60,13 +62,18 @@ def _get_partial_weight_3d(inputs, kernel, strides, data_format, dilation_rate):
     return r
 
 
+################################################################################
+# private based class (modified from keras.layers._Conv)
+
 class _Conv(Layer):
-    """Abstract nD convolution layer (private, used as implementation base).
-    This layer creates a convolution kernel that is convolved
+    """Abstract Partial nD convolution layer (private, used as implementation base).
+    This layer creates a partial convolution kernel that is convolved
     with the layer input to produce a tensor of outputs.
-    If `use_bias` is True, a bias vector is created and added to the outputs.
-    Finally, if `activation` is not `None`,
-    it is applied to the outputs as well.
+    This layer is based on original keras.layers._Conv class and almost same, but
+    padding algorithm is deferent from original class.
+    Instead of zero padding, convolution result is weighted to its effective
+    kernel size.
+    (for that reason, this class doesn't has "padding" option.)
     # Arguments
         rank: An integer, the rank of the convolution,
             e.g. "2" for 2D convolution.
@@ -120,7 +127,6 @@ class _Conv(Layer):
                  filters,
                  kernel_size,
                  strides=1,
-                 # padding='valid',
                  data_format=None,
                  dilation_rate=1,
                  activation=None,
@@ -204,7 +210,7 @@ class _Conv(Layer):
                 inputs,
                 self.kernel,
                 strides=self.strides,
-                padding='same',
+                padding=self.padding,
                 data_format=self.data_format,
                 dilation_rate=self.dilation_rate)
             r = _get_partial_weight_2d(
@@ -294,10 +300,15 @@ class _Conv(Layer):
 # imported classes
 
 class PartialConv1D(_Conv):
-    """1D convolution layer (e.g. temporal convolution).
+    """Partial 1D convolution layer (e.g. temporal convolution).
     This layer creates a convolution kernel that is convolved
     with the layer input over a single spatial (or temporal) dimension
     to produce a tensor of outputs.
+    This layer is based on original keras.layers.Conv1D class and almost same, but
+    padding algorithm is deferent from original class.
+    Instead of zero padding, convolution result is weighted to its effective
+    kernel size.
+    (for that reason, this class doesn't has "padding" option.)
     If `use_bias` is True, a bias vector is created and added to the outputs.
     Finally, if `activation` is not `None`,
     it is applied to the outputs as well.
@@ -316,19 +327,7 @@ class PartialConv1D(_Conv):
             specifying the stride length of the convolution.
             Specifying any stride value != 1 is incompatible with specifying
             any `dilation_rate` value != 1.
-        # padding: One of `"valid"`, `"causal"` or `"same"` (case-insensitive).
-        #     `"valid"` means "no padding".
-        #     `"same"` results in padding the input such that
-        #     the output has the same length as the original input.
-        #     `"causal"` results in causal (dilated) convolutions,
-        #     e.g. `output[t]` does not depend on `input[t + 1:]`.
-        #     A zero padding is used such that
-        #     the output has the same length as the original input.
-        #     Useful when modeling temporal data where the model
-        #     should not violate the temporal order. See
-        #     [WaveNet: A Generative Model for Raw Audio, section 2.1](
-        #     https://arxiv.org/abs/1609.03499).
-        # -> forced to be set "same" (due to PartialConvolution)
+        padding: not used, but remained for compatibility with original Conv3D.
         data_format: A string,
             one of `"channels_last"` (default) or `"channels_first"`.
             The ordering of the dimensions in the inputs.
@@ -373,7 +372,7 @@ class PartialConv1D(_Conv):
     def __init__(self, filters,
                  kernel_size,
                  strides=1,
-                 padding='valid',
+                 padding=None,
                  data_format='channels_last',
                  dilation_rate=1,
                  activation=None,
@@ -386,17 +385,13 @@ class PartialConv1D(_Conv):
                  kernel_constraint=None,
                  bias_constraint=None,
                  **kwargs):
-        if padding == 'causal':
-            if data_format != 'channels_last':
-                raise ValueError('When using causal padding in `Conv1D`, '
-                                 '`data_format` must be "channels_last" '
-                                 '(temporal data).')
+        if padding is not None:
+            warnings.warn('padding option is not used at PartialConv modules.')
         super(Conv1D, self).__init__(
             rank=1,
             filters=filters,
             kernel_size=kernel_size,
             strides=strides,
-            padding=padding,
             data_format=data_format,
             dilation_rate=dilation_rate,
             activation=activation,
@@ -417,10 +412,15 @@ class PartialConv1D(_Conv):
 
 
 class PartialConv2D(_Conv):
-    """2D convolution layer (e.g. spatial convolution over images).
+    """Partial 2D convolution layer (e.g. spatial convolution over images).
     This layer creates a convolution kernel that is convolved
-    with the layer input to produce a tensor of
-    outputs. If `use_bias` is True,
+    with the layer input to produce a tensor of outputs.
+    This layer is based on original keras.layers.Conv2D class and almost same, but
+    padding algorithm is deferent from original class.
+    Instead of zero padding, convolution result is weighted to its effective
+    kernel size.
+    (for that reason, this class doesn't has "padding" option.)
+    If `use_bias` is True,
     a bias vector is created and added to the outputs. Finally, if
     `activation` is not `None`, it is applied to the outputs as well.
     When using this layer as the first layer in a model,
@@ -442,11 +442,7 @@ class PartialConv2D(_Conv):
             all spatial dimensions.
             Specifying any stride value != 1 is incompatible with specifying
             any `dilation_rate` value != 1.
-        # padding: one of `"valid"` or `"same"` (case-insensitive).
-        #     Note that `"same"` is slightly inconsistent across backends with
-        #     `strides` != 1, as described
-        #     [here](https://github.com/keras-team/keras/pull/9473#issuecomment-372166860)
-        # -> forced to be set "same" (due to PartialConvolution)
+        padding: not used, but remained for compatibility with original Conv3D.
         data_format: A string,
             one of `"channels_last"` or `"channels_first"`.
             The ordering of the dimensions in the inputs.
@@ -505,7 +501,7 @@ class PartialConv2D(_Conv):
     def __init__(self, filters,
                  kernel_size,
                  strides=(1, 1),
-                 # padding='valid',
+                 padding=None,  # for compatibility with Conv2D (warned)
                  data_format=None,
                  dilation_rate=(1, 1),
                  activation=None,
@@ -518,6 +514,9 @@ class PartialConv2D(_Conv):
                  kernel_constraint=None,
                  bias_constraint=None,
                  **kwargs):
+        if padding is not None:
+            warnings.warn('padding option is not used at PartialConv modules.')
+
         super(PartialConv2D, self).__init__(
             rank=2,
             filters=filters,
@@ -543,10 +542,15 @@ class PartialConv2D(_Conv):
 
 
 class PartialConv3D(_Conv):
-    """3D convolution layer (e.g. spatial convolution over volumes).
+    """Partial 3D convolution layer (e.g. spatial convolution over volumes).
     This layer creates a convolution kernel that is convolved
-    with the layer input to produce a tensor of
-    outputs. If `use_bias` is True,
+    with the layer input to produce a tensor of outputs.
+    This layer is based on original keras.layers.Conv2D class and almost same, but
+    padding algorithm is deferent from original class.
+    Instead of zero padding, convolution result is weighted to its effective
+    kernel size.
+    (for that reason, this class doesn't has "padding" option.)
+    If `use_bias` is True,
     a bias vector is created and added to the outputs. Finally, if
     `activation` is not `None`, it is applied to the outputs as well.
     When using this layer as the first layer in a model,
@@ -568,8 +572,7 @@ class PartialConv3D(_Conv):
             all spatial dimensions.
             Specifying any stride value != 1 is incompatible with specifying
             any `dilation_rate` value != 1.
-        # padding: one of `"valid"` or `"same"` (case-insensitive).
-        # -> forced to be set "same" (due to PartialConvolution)
+        padding: not used, but remained for compatibility with original Conv3D.
         data_format: A string,
             one of `"channels_last"` or `"channels_first"`.
             The ordering of the dimensions in the inputs.
@@ -629,7 +632,7 @@ class PartialConv3D(_Conv):
     def __init__(self, filters,
                  kernel_size,
                  strides=(1, 1, 1),
-                 padding='valid',
+                 padding=None,
                  data_format=None,
                  dilation_rate=(1, 1, 1),
                  activation=None,
@@ -642,12 +645,13 @@ class PartialConv3D(_Conv):
                  kernel_constraint=None,
                  bias_constraint=None,
                  **kwargs):
+        if padding is not None:
+            warnings.warn('padding option is not used at PartialConv modules.')
         super(Conv3D, self).__init__(
             rank=3,
             filters=filters,
             kernel_size=kernel_size,
             strides=strides,
-            padding=padding,
             data_format=data_format,
             dilation_rate=dilation_rate,
             activation=activation,
@@ -667,6 +671,7 @@ class PartialConv3D(_Conv):
         return config
 
 
+################################################################################
 # Aliases
 
 PartialConvolution1D = PartialConv1D
