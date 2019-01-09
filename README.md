@@ -1,4 +1,4 @@
-Keras extention packages
+Keras extension packages
 ========================
 
 This package provide tips of keras extentions.
