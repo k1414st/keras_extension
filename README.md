@@ -3,11 +3,6 @@ Keras extension packages
 
 This package provide tips of keras extentions.
 
-PartialConvND (N = 1~3)
------------------------
-#### Description
-PartialConvND classes are implementation of  "Partial Convolutional based padding" which re-weight convolution near image borders based on the ratios between the padded area and the convolution sliding window area. this algorithm has been introduced by *Guilin Liu et al.* in https://arxiv.org/abs/1811.11718
-
 #### Installation
 1. check out this repository.
 ```
@@ -17,6 +12,11 @@ git clone https://github.com/k1414st/keras_extention
 ```
 python setup.py install
 ```
+
+PartialConvND (N = 1~3)
+-----------------------
+#### Description
+PartialConvND classes are implementation of  "Partial Convolutional based padding" which re-weight convolution near image borders based on the ratios between the padded area and the convolution sliding window area. this algorithm has been introduced by *Guilin Liu et al.* in https://arxiv.org/abs/1811.11718
 
 #### sample code
 You can easily use PartialConv2D instead of Conv2D like this simple code.
