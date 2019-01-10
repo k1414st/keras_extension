@@ -12,7 +12,7 @@ with open('LICENSE') as f:
     license = f.read()
 
 setup(
-    name='keras_extention',
+    name='keras_extension',
     version='0.0.1',
     description='keras extention like original layers, metrics, and losses.',
     long_description=readme,

@@ -6,7 +6,7 @@ This package provide tips of keras extentions.
 #### Installation
 1. check out this repository.
 ```
-git clone https://github.com/k1414st/keras_extention
+git clone https://github.com/k1414st/keras_extension
 ```
 2. use setup.py to install this package.
 ```
@@ -25,7 +25,7 @@ import numpy as np
 import tensorflow as tf
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten
-from keras_extention.layers import PartialConv2D
+from keras_extension.layers import PartialConv2D
 
 # load data
 mnist = tf.keras.datasets.mnist

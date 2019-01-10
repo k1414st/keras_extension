@@ -19,8 +19,8 @@ class ControlUnit(Layer):
     """Control Unit class for the MAC Cell.
 
     # Arguments
-        softmax_activation: Activation function to use
-            for the softmax step
+        attention_activation: Activation function to use
+            for the attention step of contextual words.
             (see [activations](../activations.md)).
             Default: softmax.
         kernel_initializer: Initializer for the `kernel` weights matrix,
@@ -102,8 +102,8 @@ class ReadUnit(Layer):
     """Read Unit class for the MAC Cell.
 
     # Arguments
-        softmax_activation: Activation function to use
-            for the softmax step
+        attention_activation: Activation function to use
+            for the attention step of weighing knowledge.
             (see [activations](../activations.md)).
             Default: softmax.
         kernel_initializer: Initializer for the `kernel` weights matrix,
@@ -191,8 +191,8 @@ class WriteUnit(Layer):
     """Write Unit class for the MAC Cell.
 
     # Arguments
-        softmax_activation: Activation function to use
-            for the softmax step
+        forget_activation: Forget Activation function
+            used for the softmax step
             (see [activations](../activations.md)).
             Default: softmax.
         kernel_initializer: Initializer for the `kernel` weights matrix,
@@ -292,10 +292,13 @@ class MACCell(Layer):
     """MAC Cell class for the MAC Recurrent Layer.
 
     # Arguments
-        softmax_activation: Activation function to use
-            for the softmax step
-            (see [activations](../activations.md)).
+        attention_activation: Attention activation function
+            used for the contextual words weight, knowledge weight, and
+            memory self-attention weight.
             Default: softmax.
+        forget_activation: Forget Activation function
+            used for the output of memory in the WriteUnit.
+            Default: sigmoid.
         kernel_initializer: Initializer for the `kernel` weights matrix,
             used for the linear transformation of the inputs
             (see [initializers](../initializers.md)).
@@ -392,10 +395,15 @@ class MAC(Layer):
     """MAC Recurrent Layer class for the MAC Network.
 
     # Arguments
-        softmax_activation: Activation function to use
-            for the softmax step
-            (see [activations](../activations.md)).
+        recurrent_length: Recurrent length of MAC cell
+            used for the loop of calling MAC cell.
+        attention_activation: Attention activation function
+            used for the contextual words weight, knowledge weight, and
+            memory self-attention weight.
             Default: softmax.
+        forget_activation: Forget Activation function
+            used for the output of memory in the WriteUnit.
+            Default: sigmoid.
         kernel_initializer: Initializer for the `kernel` weights matrix,
             used for the linear transformation of the inputs
             (see [initializers](../initializers.md)).
@@ -518,81 +526,3 @@ class MAC(Layer):
                 (input_shape[1][0], self.units)]
 
 
-from keras.models import Model
-from keras.layers import Input, Dense, Activation
-from keras.layers import LSTM
-
-
-input_c = Input(shape=(10,))
-input_q = Input(shape=(20,))
-input_s = Input(shape=(7, 10))
-x = ControlUnit()([input_c, input_q, input_s])
-x = Dense(10)(x)
-output_layer = Activation('softmax')(x)
-model = Model([input_c, input_q, input_s], output_layer)
-model.compile(optimizer='rmsprop',
-              loss='categorical_crossentropy',
-              metrics=['accuracy'])
-print(model.summary())
-
-
-input_c = Input(shape=(10,))
-input_m = Input(shape=(10,))
-input_k = Input(shape=(7, 10))
-x = ReadUnit()([input_c, input_m, input_k])
-x = Dense(10)(x)
-output_layer = Activation('softmax')(x)
-model = Model([input_c, input_m, input_k], output_layer)
-model.compile(optimizer='rmsprop',
-              loss='categorical_crossentropy',
-              metrics=['accuracy'])
-model.summary()
-
-
-input_c = Input(shape=(10,))
-input_r = Input(shape=(10,))
-input_m = Input(shape=(10,))
-input_msa = Input(shape=(10,))
-x = WriteUnit()([input_c, input_r, input_m, input_msa])
-x = Dense(10)(x)
-output_layer = Activation('softmax')(x)
-model = Model([input_c, input_r, input_m, input_msa], output_layer)
-model.compile(optimizer='rmsprop',
-              loss='categorical_crossentropy',
-              metrics=['accuracy'])
-model.summary()
-
-
-from keras.layers import Add, Flatten
-input_c = Input(shape=(10,))
-input_m = Input(shape=(10,))
-input_q = Input(shape=(20,))
-input_cw = Input(shape=(15, 10,))
-input_k = Input(shape=(35, 10,))
-input_msa = Input(shape=(10,))
-x, y = MACCell()([input_c, input_m, input_q, input_cw, input_k, input_msa])
-z = Add()([x, y])
-z = Dense(10)(z)
-output_layer = Activation('softmax')(z)
-print(x, y, z, output_layer)
-model = Model([input_c, input_m, input_q, input_cw,
-               input_k, input_msa], output_layer)
-model.compile(optimizer='rmsprop',
-              loss='categorical_crossentropy',
-              metrics=['accuracy'])
-model.summary()
-
-
-from keras.layers import Add, Flatten
-input_q = Input(shape=(20,))
-input_cw = Input(shape=(15, 10,))
-input_k = Input(shape=(35, 10,))
-x, y = MAC(recurrent_length=3)([input_q, input_cw, input_k])
-z = Add()([x, y])
-z = Dense(10)(z)
-output_layer = Activation('softmax')(z)
-model = Model([input_q, input_cw, input_k], output_layer)
-model.compile(optimizer='rmsprop',
-              loss='categorical_crossentropy',
-              metrics=['accuracy'])
-model.summary()
