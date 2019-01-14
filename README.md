@@ -77,7 +77,7 @@ This algorithm has been introduced by Yujie-Qian et al. in https://arxiv.org/abs
 from keras.layers import Input
 from keras_extension.layers import GraphConv
 input_layer = Input(shape=(32, 256))
-input_graph = Input(shape=(32, 512))
+input_graph = Input(shape=(32, 32))
 
 output_layer = GraphConv(units=16)([input_layer, input_graph])
 ```
