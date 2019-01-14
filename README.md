@@ -64,3 +64,20 @@ input_knowledge = Input(shape=(16*16, 512))
 
 c, m = MAC(recurrent_length=16)([input_q, input_cw, input_knowledge])
 ```
+
+GraphConv (generalized Graph Convolution Layer)
+-----------------------
+#### Description
+
+Graph Convolution Layer operates over a graph representing both local and nonlocal dependencies between graphical relationed units (i.e. commercial distribution, SNS networks or relationed words or articles, etc). The algorithm propagates information between connected nodes through graph convolutions and exploits the richer representations to improve graphically relationed representations.
+This algorithm has been introduced by Yujie-Qian et al. in https://arxiv.org/abs/1810.13083, and Liang Yao et al. in https://arxiv.org/abs/1809.05679.
+
+#### usage
+```
+from keras.layers import Input
+from keras_extension.layers import GraphConv
+input_layer = Input(shape=(32, 256))
+input_graph = Input(shape=(32, 512))
+
+output_layer = GraphConv(units=16)([input_layer, input_graph])
+```
