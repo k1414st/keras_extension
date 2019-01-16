@@ -272,11 +272,10 @@ class GraphRNN(Layer):
         def step(inputs, states):
             return self.cell.call(inputs, states)
 
-        last_output, outputs, states = K.rnn(step,
-                                             beta,
-                                             initial_state,
-                                             input_length=self.length,
-                                             )
+        last_output, outputs, states = \
+            K.rnn(step, beta,
+                  initial_state,
+                  input_length=self.length)
         return outputs
 
     def compute_output_shape(self, input_shape):
