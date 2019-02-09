@@ -34,10 +34,6 @@ class GraphConv(Layer):
         use_vertex_weight: use graph-vertex self-loop weight.
             if False, no special self-loop weight is added.
             (diagonal component of graph-egde is used as self-loop implicitly)
-        normalize_graph_input: normalize graph input.
-            sum of graph-arrow input to one node is normalized to 1.
-        normalize_graph_output: normalize graph output.
-            sum of graph-arrow output from one node is normalized to 1.
         activation: Activation function of output.
             default: 'sigmoid'
 
@@ -61,8 +57,6 @@ class GraphConv(Layer):
     def __init__(self,
                  units,
                  use_vertex_weight=True,
-                 normalize_graph_input=False,
-                 normalize_graph_output=True,
                  activation='sigmoid',
                  kernel_initializer='glorot_uniform',
                  bias_initializer='zeros',
@@ -74,8 +68,6 @@ class GraphConv(Layer):
         super(GraphConv, self).__init__(**kwargs)
         self.units = units
         self.use_vertex_weight = use_vertex_weight
-        self.normalize_graph_input = normalize_graph_input
-        self.normalize_graph_output = normalize_graph_output
         self.activation = activations.get(activation)
         self.kernel_initializer = initializers.get(kernel_initializer)
         self.bias_initializer = initializers.get(bias_initializer)
@@ -120,16 +112,6 @@ class GraphConv(Layer):
         ### beta (edge)
         beta = K.dot(seq_data, self.e_weight)
 
-        # normalize graph (input-base or output-base)
-        if self.normalize_graph_output:
-            # Normalize factor of graph-arrow input (B, L(out))
-            norm = K.maximum(K.sum(graph, axis=2), K.epsilon())
-            beta = beta / K.expand_dims(norm, axis=2)  # BL(in)D,BL(in)1->BL(in)D
-        if self.normalize_graph_input:
-            # Normalize factor of graph-arrowinput (B, L(in))
-            norm = K.maximum(K.sum(graph, axis=1), K.epsilon())
-            beta = beta / K.expand_dims(norm, axis=1)  # BDL(o),B1L(o)->BDL(o)
-
         beta = K.batch_dot(beta, graph, axes=(1, 1))  # BLD,BL(i)L(o)->BDL(o)
         beta = K.permute_dimensions(beta, (0, 2, 1))  # BDL(o)->BL(o)D
 
@@ -155,10 +137,6 @@ class GraphRNN(Layer):
     Args:
         cell: A RNN cell instance. A RNN cell is a class that has
             call method and state_size attribute.
-        normalize_graph_input: normalize graph input.
-            sum of graph-arrow input to one node is normalized to 1.
-        normalize_graph_output: normalize graph output.
-            sum of graph-arrow output from one node is normalized to 1.
         activation: Activation function of output.
             default: 'sigmoid'
 
@@ -181,8 +159,6 @@ class GraphRNN(Layer):
 
     def __init__(self,
                  cell,
-                 normalize_graph_input=False,
-                 normalize_graph_output=True,
                  activation='sigmoid',
                  kernel_initializer='glorot_uniform',
                  bias_initializer='zeros',
@@ -193,8 +169,6 @@ class GraphRNN(Layer):
                  **kwargs):
         super(GraphRNN, self).__init__(**kwargs)
         self.cell = cell
-        self.normalize_graph_input = normalize_graph_input
-        self.normalize_graph_output = normalize_graph_output
         self.activation = activations.get(activation)
         self.kernel_initializer = initializers.get(kernel_initializer)
         self.bias_initializer = initializers.get(bias_initializer)
@@ -255,16 +229,6 @@ class GraphRNN(Layer):
 
         ### beta (edge)
         beta = K.dot(seq_data, self.e_weight)
-
-        # normalize graph (input-base or output-base)
-        if self.normalize_graph_output:
-            # Normalize factor of graph-arrow input (B, L(out))
-            norm = K.maximum(K.sum(graph, axis=2), K.epsilon())
-            beta = beta / K.expand_dims(norm, axis=2)  # BL(in)D,BL(in)1->BL(in)D
-        if self.normalize_graph_input:
-            # Normalize factor of graph-arrowinput (B, L(in))
-            norm = K.maximum(K.sum(graph, axis=1), K.epsilon())
-            beta = beta / K.expand_dims(norm, axis=1)  # BDL(o),B1L(o)->BDL(o)
 
         beta = K.batch_dot(beta, graph, axes=(1, 1))  # BLD,BL(i)L(o)->BDL(o)
         beta = K.permute_dimensions(beta, (0, 2, 1))  # BDL(o)->BL(o)D
