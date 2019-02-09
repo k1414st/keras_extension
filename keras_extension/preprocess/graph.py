@@ -132,11 +132,13 @@ def normalize_graph_matrix(mtx,
             mtx = _batch_dot(np.sqrt(D), _batch_dot(mtx, np.sqrt(D)))
 
     elif normalize_input:
-        D = mtx.sum(axis=-1, keepdims=True)
-        mtx /= (D + epsilon)
+        D = mtx.sum(axis=-1)
+        D = np.where(D>epsilon, D, epsilon)
+        mtx = np.einsum('ijk,ij->ijk', mtx, 1/D)
     elif normalize_output:
         D = mtx.sum(axis=-2, keepdims=True)
-        mtx /= (D + epsilon)
+        D = np.where(D>epsilon, D, epsilon)
+        mtx = np.einsum('ijk,ik->ijk', mtx, 1/D)
 
     # batch & sparse -> np.array of csr_matrix
     if mtx.ndim == 3 and matrix_type == csr_matrix:
