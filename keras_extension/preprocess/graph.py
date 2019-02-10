@@ -54,20 +54,25 @@ def to_laplacian(mtx,
     if binarize:
         mtx = np.where(mtx == 0, 0., 1.)
 
-    # normalize adjacency matrix. (A -> D^1/2 `dot` A `dot` D^1/2)
-    if normalize:
-        if mtx.ndim == 2:
-            D = np.diag(mtx.sum(axis=-1))
-            mtx = np.sqrt(D).dot(mtx.dot(np.sqrt(D)))
-        elif mtx.ndim == 3:
-            D = np.array([np.diag(m.sum(axis=1)) for m in mtx])
-            mtx = _batch_dot(np.sqrt(D), _batch_dot(mtx, np.sqrt(D)))
 
+    # case of ndim(2 or 3) x normalize(Do or Not).
     if mtx.ndim == 2:
-        I = np.eye(mtx.shape[-1])
+        D = np.diag(mtx.sum(axis=-1))
+        if normalize:
+            # normalize adjacency matrix. (A -> D^1/2 `dot` A `dot` D^1/2)
+            mtx = np.sqrt(D).dot(mtx.dot(np.sqrt(D)))
+            I = np.eye(mtx.shape[-1])
+            mtx_laplacian = I - mtx
+        else:
+            mtx_laplacian = D - mtx
     elif mtx.ndim == 3:
-        I = np.expand_dims(np.eye(mtx.shape[-1]), axis=0)
-    mtx_laplacian = I - mtx
+        D = np.array([np.diag(m.sum(axis=1)) for m in mtx])
+        if normalize:
+            mtx = _batch_dot(np.sqrt(D), _batch_dot(mtx, np.sqrt(D)))
+            I = np.expand_dims(np.eye(mtx.shape[-1]), axis=0)
+            mtx_laplacian = I - mtx
+        else:
+            mtx_laplacian = D - mtx
 
     # batch & sparse -> np.array of csr_matrix
     if mtx.ndim == 3 and matrix_type == csr_matrix:
@@ -133,11 +138,11 @@ def normalize_graph_matrix(mtx,
 
     elif normalize_input:
         D = mtx.sum(axis=-1)
-        D = np.where(D>epsilon, D, epsilon)
+        D = np.where(D > epsilon, D, epsilon)
         mtx = np.einsum('ijk,ij->ijk', mtx, 1/D)
     elif normalize_output:
-        D = mtx.sum(axis=-2, keepdims=True)
-        D = np.where(D>epsilon, D, epsilon)
+        D = mtx.sum(axis=-2)
+        D = np.where(D > epsilon, D, epsilon)
         mtx = np.einsum('ijk,ik->ijk', mtx, 1/D)
 
     # batch & sparse -> np.array of csr_matrix
@@ -146,4 +151,3 @@ def normalize_graph_matrix(mtx,
     # np.array or single csr_matrix
     else:
         return matrix_type(mtx)
-
