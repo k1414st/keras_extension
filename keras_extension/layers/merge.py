@@ -318,6 +318,7 @@ if __name__ == '__main__':
     from keras.layers import Input, Dense, Dot
     g = Input(batch_shape=(3, 4), sparse=True)
     x = Input(batch_shape=(None, 4))
+    print(type(g))
 
     y = SparseDot(axes=(1, 1))([g, x])
     print(g.shape, x.shape, y.shape)
