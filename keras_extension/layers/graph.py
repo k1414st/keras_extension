@@ -245,4 +245,3 @@ class GraphRNN(Layer):
     def compute_output_shape(self, input_shape):
         return (input_shape[0][0], input_shape[0][1], self.cell.units)
 
-
