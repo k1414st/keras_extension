@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Recurrent layers and their base classes.
+Graph Neural Network layers.
 This implementation is based on
 "GraphIE: A Graph-Based Framework for Information Extraction"
 (https://arxiv.org/abs/1810.13083)
@@ -24,10 +24,8 @@ from keras.engine.base_layer import Layer
 
 class GraphConv(Layer):
     """
-    Graphical Convolution Layer from sequenttal to sequential
-    connected by user-specified (static) weighted-digraph.
-    Graph is dynamic, you must input graph-data correspond to your
-    input sequential data.
+    Graphical Convolution Layer connected by user-specified weighted-digraph.
+    You must input graph-data node-data.
 
     Args:
         units: Positive integer, dimensionality of the output space.
@@ -37,20 +35,21 @@ class GraphConv(Layer):
         activation: Activation function of output.
             default: 'sigmoid'
 
+        use_bias: use bias vector or not.
+        bias_initializer: Initializer for the bias vector
+            (see [initializers](../initializers.md)).
+        bias_regularizer: Regularizer function applied to the bias vector
+            (see [regularizer](../regularizers.md)).
+        bias_constraint: Constraint function applied to the bias vector
+            (see [constraints](../constraints.md)).
         kernel_initializer: Initializer for the `kernel` weights matrix,
             used for the linear transformation of the inputs
-            (see [initializers](../initializers.md)).
-        bias_initializer: Initializer for the bias vector
             (see [initializers](../initializers.md)).
         kernel_regularizer: Regularizer function applied to
             the `kernel` weights matrix
             (see [regularizer](../regularizers.md)).
-        bias_regularizer: Regularizer function applied to the bias vector
-            (see [regularizer](../regularizers.md)).
         kernel_constraint: Constraint function applied to
             the `kernel` weights matrix
-            (see [constraints](../constraints.md)).
-        bias_constraint: Constraint function applied to the bias vector
             (see [constraints](../constraints.md)).
     """
 
@@ -58,23 +57,25 @@ class GraphConv(Layer):
                  units,
                  use_vertex_weight=True,
                  activation='sigmoid',
-                 kernel_initializer='glorot_uniform',
+                 use_bias=False,
                  bias_initializer='zeros',
-                 kernel_regularizer=None,
                  bias_regularizer=None,
-                 kernel_constraint=None,
                  bias_constraint=None,
+                 kernel_initializer='glorot_uniform',
+                 kernel_regularizer=None,
+                 kernel_constraint=None,
                  **kwargs):
         super(GraphConv, self).__init__(**kwargs)
         self.units = units
         self.use_vertex_weight = use_vertex_weight
         self.activation = activations.get(activation)
-        self.kernel_initializer = initializers.get(kernel_initializer)
+        self.use_bias = use_bias
         self.bias_initializer = initializers.get(bias_initializer)
-        self.kernel_regularizer = regularizers.get(kernel_regularizer)
         self.bias_regularizer = regularizers.get(bias_regularizer)
-        self.kernel_constraint = constraints.get(kernel_constraint)
         self.bias_constraint = constraints.get(bias_constraint)
+        self.kernel_initializer = initializers.get(kernel_initializer)
+        self.kernel_regularizer = regularizers.get(kernel_regularizer)
+        self.kernel_constraint = constraints.get(kernel_constraint)
 
     def _add_w(self, shape, name):
         return self.add_weight(shape=shape, name=name+'_weight',
@@ -93,9 +94,11 @@ class GraphConv(Layer):
         self.length = input_shapes[0][-2]
         input_size = input_shapes[0][-1]
 
-        self.v_weight = self._add_w((input_size, self.units), 'v')
         self.e_weight = self._add_w((input_size, self.units), 'e')
-        self.bias = self._add_b((self.units,), 'all')
+        if self.use_vertex_weight:
+            self.v_weight = self._add_w((input_size, self.units), 'v')
+        if self.use_bias:
+            self.bias = self._add_b((self.units,), 'all')
         self.built = True
 
     def call(self, inputs, training=None):
@@ -111,16 +114,16 @@ class GraphConv(Layer):
 
         ### beta (edge)
         beta = K.dot(seq_data, self.e_weight)
-
-        beta = K.batch_dot(beta, graph, axes=(1, 1))  # BLD,BL(i)L(o)->BDL(o)
-        beta = K.permute_dimensions(beta, (0, 2, 1))  # BDL(o)->BL(o)D
+        beta = K.batch_dot(graph, beta, axes=(1, 1))  # BL(i)L(o),BL(i)D,->BL(o)D
 
         # connect edge, (vertex), bias
+        out = beta
+        if self.use_bias:
+            out = K.bias_add(out, self.bias)
         if self.use_vertex_weight:
             alpha = K.dot(seq_data, self.v_weight)
-            gi = self.activation(K.bias_add(alpha + beta, self.bias))
-        else:
-            gi = self.activation(K.bias_add(beta, self.bias))
+            out = out + alpha
+        gi = self.activation(out)
         return gi
 
     def compute_output_shape(self, input_shape):
@@ -140,42 +143,42 @@ class GraphRNN(Layer):
         activation: Activation function of output.
             default: 'sigmoid'
 
+        bias_initializer: Initializer for the bias vector
+            (see [initializers](../initializers.md)).
+        bias_regularizer: Regularizer function applied to the bias vector
+            (see [regularizer](../regularizers.md)).
+        bias_constraint: Constraint function applied to the bias vector
+            (see [constraints](../constraints.md)).
         kernel_initializer: Initializer for the `kernel` weights matrix,
             used for the linear transformation of the inputs
-            (see [initializers](../initializers.md)).
-        bias_initializer: Initializer for the bias vector
             (see [initializers](../initializers.md)).
         kernel_regularizer: Regularizer function applied to
             the `kernel` weights matrix
             (see [regularizer](../regularizers.md)).
-        bias_regularizer: Regularizer function applied to the bias vector
-            (see [regularizer](../regularizers.md)).
         kernel_constraint: Constraint function applied to
             the `kernel` weights matrix
-            (see [constraints](../constraints.md)).
-        bias_constraint: Constraint function applied to the bias vector
             (see [constraints](../constraints.md)).
     """
 
     def __init__(self,
                  cell,
                  activation='sigmoid',
-                 kernel_initializer='glorot_uniform',
                  bias_initializer='zeros',
-                 kernel_regularizer=None,
                  bias_regularizer=None,
-                 kernel_constraint=None,
                  bias_constraint=None,
+                 kernel_initializer='glorot_uniform',
+                 kernel_regularizer=None,
+                 kernel_constraint=None,
                  **kwargs):
         super(GraphRNN, self).__init__(**kwargs)
         self.cell = cell
         self.activation = activations.get(activation)
-        self.kernel_initializer = initializers.get(kernel_initializer)
         self.bias_initializer = initializers.get(bias_initializer)
-        self.kernel_regularizer = regularizers.get(kernel_regularizer)
         self.bias_regularizer = regularizers.get(bias_regularizer)
-        self.kernel_constraint = constraints.get(kernel_constraint)
         self.bias_constraint = constraints.get(bias_constraint)
+        self.kernel_initializer = initializers.get(kernel_initializer)
+        self.kernel_regularizer = regularizers.get(kernel_regularizer)
+        self.kernel_constraint = constraints.get(kernel_constraint)
 
     def _add_w(self, shape, name):
         return self.add_weight(shape=shape, name=name+'_weight',
@@ -206,7 +209,6 @@ class GraphRNN(Layer):
         input_size = input_shapes[0][-1]
 
         self.e_weight = self._add_w((input_size, self.cell.units), 'e')
-        # self.cell.build((input_shapes[0][0], input_shapes[0][2]))
         self.cell.build((input_shapes[0][0], self.cell.units))
         self.built = True
 
@@ -229,19 +231,17 @@ class GraphRNN(Layer):
 
         ### beta (edge)
         beta = K.dot(seq_data, self.e_weight)
-
-        beta = K.batch_dot(beta, graph, axes=(1, 1))  # BLD,BL(i)L(o)->BDL(o)
-        beta = K.permute_dimensions(beta, (0, 2, 1))  # BDL(o)->BL(o)D
+        beta = K.batch_dot(graph, beta, axes=(1, 1))  # BL(i)L(o),BL(i)D,->BL(o)D
 
         def step(inputs, states):
             return self.cell.call(inputs, states)
 
         last_output, outputs, states = \
-            K.rnn(step, beta,
+            K.rnn(step,
+                  beta,
                   initial_state,
                   input_length=self.length)
         return outputs
 
     def compute_output_shape(self, input_shape):
         return (input_shape[0][0], input_shape[0][1], self.cell.units)
-
