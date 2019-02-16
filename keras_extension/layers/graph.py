@@ -29,7 +29,7 @@ class GraphConv(Layer):
 
     Args:
         units: Positive integer, dimensionality of the output space.
-        use_vertex_weight: use graph-vertex self-loop weight.
+        use_node_weight: use graph-node self-loop weight.
             if False, no special self-loop weight is added.
             (diagonal component of graph-egde is used as self-loop implicitly)
         activation: Activation function of output.
@@ -49,7 +49,7 @@ class GraphConv(Layer):
 
     def __init__(self,
                  units,
-                 use_vertex_weight=True,
+                 use_node_weight=True,
                  activation='sigmoid',
                  use_bias=False,
                  bias_initializer='zeros',
@@ -61,7 +61,7 @@ class GraphConv(Layer):
                  **kwargs):
         super(GraphConv, self).__init__(**kwargs)
         self.units = units
-        self.use_vertex_weight = use_vertex_weight
+        self.use_node_weight = use_node_weight
         self.activation = activations.get(activation)
         self.use_bias = use_bias
         self.bias_initializer = initializers.get(bias_initializer)
@@ -89,7 +89,7 @@ class GraphConv(Layer):
         input_size = input_shapes[0][-1]
 
         self.e_weight = self._add_w((input_size, self.units), 'e')
-        if self.use_vertex_weight:
+        if self.use_node_weight:
             self.v_weight = self._add_w((input_size, self.units), 'v')
         if self.use_bias:
             self.bias = self._add_b((self.units,), 'all')
@@ -110,11 +110,11 @@ class GraphConv(Layer):
         beta = K.dot(seq_data, self.e_weight)
         beta = K.batch_dot(graph, beta, axes=(1, 1))  # BL(i)L(o),BL(i)D,->BL(o)D
 
-        # connect edge, (vertex), bias
+        # connect edge, (node), bias
         out = beta
         if self.use_bias:
             out = K.bias_add(out, self.bias)
-        if self.use_vertex_weight:
+        if self.use_node_weight:
             alpha = K.dot(seq_data, self.v_weight)
             out = out + alpha
         gi = self.activation(out)
