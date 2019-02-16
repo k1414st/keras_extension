@@ -4,7 +4,7 @@ from __future__ import print_function
 
 from .partial_convolutional import *
 from .mac import MACCell, MAC
-from .graph import GraphConv, GraphRNN
+from .graph import GraphConv, MultiGraphConv, GraphRNN
 from keras.backend import backend
 if backend == 'tensorflow':
     from .merge import SparseDot

@@ -84,7 +84,9 @@ class GraphConv(Layer):
                                constraint=self.bias_constraint)
 
     def build(self, input_shapes):
-        # graph: (N_batch, L, L),  input: (N_batch, L, D)
+        # input: (N_batch, L, D),  graph: (N_batch, L, L)
+        # L: node_size
+        # D: feat_size (self.units)
         self.length = input_shapes[0][-2]
         input_size = input_shapes[0][-1]
 
@@ -108,7 +110,7 @@ class GraphConv(Layer):
 
         ### beta (edge)
         beta = K.dot(seq_data, self.e_weight)
-        beta = K.batch_dot(graph, beta, axes=(1, 1))  # BL(i)L(o),BL(i)D,->BL(o)D
+        beta = K.batch_dot(graph, beta, axes=(2, 1))  # BL(o)L(i),BL(i)D,->BL(o)D
 
         # connect edge, (node), bias
         out = beta
@@ -124,12 +126,129 @@ class GraphConv(Layer):
         return (input_shape[0][0], input_shape[0][1], self.units)
 
 
+class MultiGraphConv(Layer):
+    """
+    Graphical Convolution Layer using layered graphs.
+    You must input graph-data node-data.
+
+    Args:
+        units: Positive integer, dimensionality of the output space.
+        use_node_weight: use graph-node self-loop weight.
+            if False, no special self-loop weight is added.
+            (diagonal component of graph-egde is used as self-loop implicitly)
+        activation: Activation function of output.
+            default: 'sigmoid'
+
+        use_bias: use bias vector or not.
+        bias_initializer: Initializer for the bias vector
+        bias_regularizer: Regularizer function applied to the bias vector
+        bias_constraint: Constraint function applied to the bias vector
+        kernel_initializer: Initializer for the `kernel` weights matrix,
+            used for the linear transformation of the inputs
+        kernel_regularizer: Regularizer function applied to
+            the `kernel` weights matrix
+        kernel_constraint: Constraint function applied to
+            the `kernel` weights matrix
+    """
+
+    def __init__(self,
+                 units,
+                 use_node_weight=True,
+                 activation='sigmoid',
+                 use_bias=False,
+                 bias_initializer='zeros',
+                 bias_regularizer=None,
+                 bias_constraint=None,
+                 kernel_initializer='glorot_uniform',
+                 kernel_regularizer=None,
+                 kernel_constraint=None,
+                 **kwargs):
+        super(MultiGraphConv, self).__init__(**kwargs)
+        self.units = units
+        self.use_node_weight = use_node_weight
+        self.activation = activations.get(activation)
+        self.use_bias = use_bias
+        self.bias_initializer = initializers.get(bias_initializer)
+        self.bias_regularizer = regularizers.get(bias_regularizer)
+        self.bias_constraint = constraints.get(bias_constraint)
+        self.kernel_initializer = initializers.get(kernel_initializer)
+        self.kernel_regularizer = regularizers.get(kernel_regularizer)
+        self.kernel_constraint = constraints.get(kernel_constraint)
+
+    def _add_w(self, shape, name):
+        return self.add_weight(shape=shape, name=name+'_weight',
+                               initializer=self.kernel_initializer,
+                               regularizer=self.kernel_regularizer,
+                               constraint=self.kernel_constraint)
+
+    def _add_b(self, shape, name):
+        return self.add_weight(shape=shape, name=name+'_bias',
+                               initializer=self.bias_initializer,
+                               regularizer=self.bias_regularizer,
+                               constraint=self.bias_constraint)
+
+    def build(self, input_shapes):
+        # input: (N_batch, L, D),  graph: (N_batch, L, L, M)
+        # L: node_size
+        # D: feat_size (self.units)
+        # M: graph multi size
+        self.length = input_shapes[0][-2]
+        input_size = input_shapes[0][-1]
+        multi_size = input_shapes[1][-1]
+
+        self.e_weight = self._add_w((input_size, self.units), 'e')
+        if self.use_node_weight:
+            self.v_weight = self._add_w((input_size, multi_size, self.units), 'v')
+        if self.use_bias:
+            self.bias = self._add_b((self.units, multi_size), 'all')
+        self.built = True
+
+    def call(self, inputs, training=None):
+        """
+        Args:
+            input[0]: input_layer(N_Batch, L_sequence, Dim_fature)
+            input[1]: weighted-digraph(L, L) = (from, to)
+        Return:
+            output_layer(N_Batch, L_sequence, Dim_feature)
+        """
+        seq_data = inputs[0]
+        graph = inputs[1]
+
+        ### beta (edge)
+        beta = K.dot(seq_data, self.e_weight)
+
+        # batch_dot is only compatible with matrix ndim <= 3
+        #   (https://github.com/keras-team/keras/issues/9175)
+        # beta = K.batch_dot(graph, beta, axes=(2, 1))  # BL(i)L(o)M,BL(i)D,->BL(o)MD
+        # TODO:
+        #     separate "calculationg complex batch"_dot to function
+        s = graph.shape
+        graph = K.permute_dimensions(graph, (0, 2, 3, 1))
+        graph = K.reshape(graph, (-1, s[1]*s[3], s[2]))
+        beta = K.batch_dot(graph, beta, axes=(2, 1))
+        beta = K.reshape(beta, (-1, s[1], s[3], self.units))
+
+        # connect edge, (node), bias
+        out = beta
+        if self.use_bias:
+            out = K.bias_add(out, self.bias)
+        if self.use_node_weight:
+            s = self.v_weight.shape
+            w = K.reshape(self.v_weight, (s[0], s[1]*s[2]))
+            alpha = K.dot(seq_data, w)
+            alpha = K.reshape(alpha, (-1, alpha.shape[1], s[1], s[2]))
+            out = out + alpha
+        gi = self.activation(out)
+        return gi
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0][0], input_shape[0][1], input_shape[1][-1], self.units)
+
+
 class GraphRNN(Layer):
     """
-    Graphical Convolution Layer from sequenttal to sequential
-    connected by user-specified (static) weighted-digraph.
-    Graph is dynamic, you must input graph-data correspond to your
-    input sequential data.
+    Graph Recurrent Network Layer connected by user-specified weighted-digraph.
+    when creating object, you can choose recurrent cell (LSTMCell, GRUCell, etc).
 
     Args:
         cell: A RNN cell instance. A RNN cell is a class that has
@@ -192,7 +311,7 @@ class GraphRNN(Layer):
             return [K.tile(initial_state, [1, self.cell.state_size])]
 
     def build(self, input_shapes):
-        # graph: (N_batch, L, L),  input: (N_batch, L, D)
+        # input: (N_batch, L, D),  graph: (N_batch, L, L)
         self.length = input_shapes[0][-2]
         input_size = input_shapes[0][-1]
 
@@ -219,7 +338,7 @@ class GraphRNN(Layer):
 
         ### beta (edge)
         beta = K.dot(seq_data, self.e_weight)
-        beta = K.batch_dot(graph, beta, axes=(1, 1))  # BL(i)L(o),BL(i)D,->BL(o)D
+        beta = K.batch_dot(graph, beta, axes=(2, 1))  # BL(o)L(i),BL(i)D,->BL(o)D
 
         last_output, outputs, states = \
             K.rnn(lambda inputs, states: self.cell.call(inputs, states),
