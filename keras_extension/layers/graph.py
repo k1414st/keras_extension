@@ -37,20 +37,14 @@ class GraphConv(Layer):
 
         use_bias: use bias vector or not.
         bias_initializer: Initializer for the bias vector
-            (see [initializers](../initializers.md)).
         bias_regularizer: Regularizer function applied to the bias vector
-            (see [regularizer](../regularizers.md)).
         bias_constraint: Constraint function applied to the bias vector
-            (see [constraints](../constraints.md)).
         kernel_initializer: Initializer for the `kernel` weights matrix,
             used for the linear transformation of the inputs
-            (see [initializers](../initializers.md)).
         kernel_regularizer: Regularizer function applied to
             the `kernel` weights matrix
-            (see [regularizer](../regularizers.md)).
         kernel_constraint: Constraint function applied to
             the `kernel` weights matrix
-            (see [constraints](../constraints.md)).
     """
 
     def __init__(self,
@@ -144,20 +138,14 @@ class GraphRNN(Layer):
             default: 'sigmoid'
 
         bias_initializer: Initializer for the bias vector
-            (see [initializers](../initializers.md)).
         bias_regularizer: Regularizer function applied to the bias vector
-            (see [regularizer](../regularizers.md)).
         bias_constraint: Constraint function applied to the bias vector
-            (see [constraints](../constraints.md)).
         kernel_initializer: Initializer for the `kernel` weights matrix,
             used for the linear transformation of the inputs
-            (see [initializers](../initializers.md)).
         kernel_regularizer: Regularizer function applied to
             the `kernel` weights matrix
-            (see [regularizer](../regularizers.md)).
         kernel_constraint: Constraint function applied to
             the `kernel` weights matrix
-            (see [constraints](../constraints.md)).
     """
 
     def __init__(self,
@@ -233,11 +221,8 @@ class GraphRNN(Layer):
         beta = K.dot(seq_data, self.e_weight)
         beta = K.batch_dot(graph, beta, axes=(1, 1))  # BL(i)L(o),BL(i)D,->BL(o)D
 
-        def step(inputs, states):
-            return self.cell.call(inputs, states)
-
         last_output, outputs, states = \
-            K.rnn(step,
+            K.rnn(lambda inputs, states: self.cell.call(inputs, states),
                   beta,
                   initial_state,
                   input_length=self.length)
