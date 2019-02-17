@@ -50,15 +50,16 @@ def _get_simulated_data(random_state=None):
     else:
         np.random.seed(random_state)
 
-    # simulating graphical data
+    # simulating graphical data.
     # Input node data
     X = np.random.uniform(0, 1, size=(N_data, N_node, D_input))
 
-    # Graph as directed adjacency matrix
+    # Graph as directed adjacency matrix (binary).
     G = np.random.binomial(n=1, p=0.1, size=(N_data, N_node, N_node))
+    # remove diagonal elements.
     G = np.array([np.triu(g, 1) + np.tril(g, -1) for g in G])
 
-    # If sum of all flow is more than 100, set flag = 1.
+    # If sum of all flow is more than 250, set flag = 1.
     y = np.einsum('ijk,ikl->ij', G, X)
     y = np.where(y > 250, 1, 0)
 
@@ -86,4 +87,7 @@ def test_graphconv():
     print('Final AUC:', auc)
     assert(auc > 0.7)
 
+
+if __name__ == '__main__':
+    test_graphconv()
 
