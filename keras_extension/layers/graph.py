@@ -287,7 +287,7 @@ class MultiGraphConv(_ParametricLayer):
         return (input_shape[0][0], input_shape[0][1], input_shape[1][-1], self.units)
 
 
-class GraphRNN(Layer):
+class GraphRNN(_ParametricLayer):
     """
     Graph Recurrent Network Layer connected by user-specified weighted-digraph.
     when creating object, you can choose recurrent cell (LSTMCell, GRUCell, etc).
@@ -298,15 +298,9 @@ class GraphRNN(Layer):
         activation: Activation function of output.
             default: 'sigmoid'
 
-        bias_initializer: Initializer for the bias vector
-        bias_regularizer: Regularizer function applied to the bias vector
-        bias_constraint: Constraint function applied to the bias vector
-        kernel_initializer: Initializer for the `kernel` weights matrix,
-            used for the linear transformation of the inputs
-        kernel_regularizer: Regularizer function applied to
-            the `kernel` weights matrix
-        kernel_constraint: Constraint function applied to
-            the `kernel` weights matrix
+        (bias |kernel)_(initializer |regularizer |constraint):
+            see [https://keras.io/initializers], [https://keras.io/regularizers],
+                [https://keras.io/constraints]
     """
 
     def __init__(self,
