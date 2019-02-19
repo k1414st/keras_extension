@@ -2,9 +2,9 @@ import time
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
-from keras.layers import Input, Flatten, Dense
+from keras.layers import Input, Flatten, Dense, GRUCell, LSTMCell
 from keras.models import Model
-from keras_extension.layers import GraphConv
+from keras_extension.layers import GraphConv, GraphRNN
 
 # constants of data shape.
 # Number of data, Number of nodes, Dimension of input, Dimension of latent states.
@@ -18,21 +18,54 @@ D_hidden = 10
 N_TRIAL = 3
 
 
-def _get_model():
-    """ get model using graph convolution layer. """
+def _get_model_wrapper(func_graph_layer):
+    """
+    get model wrapper using graph convolution layer.
+    you need to implement only graph layer
+    with this decorator function.
+    """
 
-    input_layer = Input(shape=(N_node, D_input))  # L, D
-    input_graph = Input(shape=(N_node, N_node))  # L, L
-    g = GraphConv(D_hidden)
+    def wrapper():
+        input_layer = Input(shape=(N_node, D_input))  # L, D
+        input_graph = Input(shape=(N_node, N_node))  # L, L
 
-    x = g([input_layer, input_graph])
-    output_layer = Dense(1, activation='tanh')(x)
-    output_layer = Flatten()(output_layer)
+        # definition of graph layer
+        x = func_graph_layer(input_layer, input_graph)
 
-    mdl = Model([input_layer, input_graph], output_layer)
-    mdl.compile(optimizer='adam', loss='binary_crossentropy', metrics=['acc'])
-    mdl.summary()
-    return mdl
+        output_layer = Dense(1, activation='tanh')(x)
+        output_layer = Flatten()(output_layer)
+
+        mdl = Model([input_layer, input_graph], output_layer)
+        mdl.compile(optimizer='rmsprop', loss='binary_crossentropy', metrics=['acc'])
+        mdl.summary()
+        return mdl
+
+    return wrapper
+
+
+@_get_model_wrapper
+def _get_model_gru_single(input_layer, input_graph):
+    """ get model using GRU. """
+    g = GraphRNN(GRUCell(units=D_hidden))
+    return g([input_layer, input_graph])
+
+
+@_get_model_wrapper
+def _get_model_lstm_single(input_layer, input_graph):
+    """ get model using LSTM. """
+    g = GraphRNN(GRUCell(units=D_hidden))
+    return g([input_layer, input_graph])
+
+
+@_get_model_wrapper
+def _get_model_lstm_multi(input_layer, input_graph):
+    """ get multi-layer model using LSTM. """
+    # TODO: make GraphTimeSeriesRNN to automate timeseries recurrence.
+    g = GraphRNN(LSTMCell(units=D_hidden), return_states=True)
+    x, s = g([input_layer, input_graph])
+    x, s = g([x, input_graph, s], encode=False)
+    x, _ = g([x, input_graph, s], encode=False)
+    return x
 
 
 def _get_simulated_data(random_state=None):
@@ -70,7 +103,7 @@ def _get_simulated_data(random_state=None):
     return (X, G, y)
 
 
-def test_graphconv():
+def _test_graphrnn_with_model(mdl):
     """ simple (not real, simulation based) performance test. """
 
     list_auc = []
@@ -81,7 +114,7 @@ def test_graphconv():
             train_test_split(X, G, y, test_size=0.3)
 
         # model fit & predict
-        mdl = _get_model()
+        # mdl = _get_model_gru_single()
 
         mdl.fit([X_train, G_train], y_train,
                 validation_data=([X_test, G_test], y_test),
@@ -96,5 +129,19 @@ def test_graphconv():
     assert((np.array(list_auc) > 0.7).any())
 
 
+def test_graphrnn_with_gru_single():
+    _test_graphrnn_with_model(_get_model_gru_single())
+
+
+def test_graphrnn_with_lstm_single():
+    _test_graphrnn_with_model(_get_model_lstm_single())
+
+
+def test_graphrnn_with_lstm_multi():
+    _test_graphrnn_with_model(_get_model_lstm_single())
+
+
 if __name__ == '__main__':
-    test_graphconv()
+    test_graphrnn_with_gru_single()
+    test_graphrnn_with_lstm_single()
+    test_graphrnn_with_lstm_multi()
