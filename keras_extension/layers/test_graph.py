@@ -294,10 +294,7 @@ class GraphRNN(_ParametricLayer):
     when creating object, you can choose recurrent cell (LSTMCell, GRUCell, etc).
 
     Args:
-        cell: Set a RNN cell instance. A RNN cell is a class that must have
-            call method and state_size attribute.
-        return_states: return states
-            if True, 
+        cell: A RNN cell instance. A RNN cell is a class that has
             call method and state_size attribute.
         activation: Activation function of output.
             default: 'sigmoid'
@@ -309,7 +306,6 @@ class GraphRNN(_ParametricLayer):
 
     def __init__(self,
                  cell,
-                 return_states=False,
                  activation='sigmoid',
                  bias_initializer='zeros',
                  bias_regularizer=None,
@@ -323,15 +319,18 @@ class GraphRNN(_ParametricLayer):
             kernel_initializer, kernel_regularizer, kernel_constraint,
             **kwargs)
         self.cell = cell
-        self.return_states = return_states
         self.activation = activations.get(activation)
 
     def get_initial_state(self, inputs):
         # build an all-zero tensor of shape (samples, output_dim)
-        # reshape to (N, nodes, input_dim) -> (N, nodes, hidden_dim)
-        initial_state = K.zeros_like(inputs)[:, :, 0]
-        initial_state = K.expand_dims(initial_state, axis=2)
-        return K.tile(initial_state, [1, 1, self.cell.units])
+        initial_state = K.zeros_like(inputs)  # (samples, timesteps, input_dim)
+        initial_state = K.sum(initial_state, axis=(1, 2))  # (samples,)
+        initial_state = K.expand_dims(initial_state)  # (samples, 1)
+        if hasattr(self.cell.state_size, '__len__'):
+            return [K.tile(initial_state, [1, dim])
+                    for dim in self.cell.state_size]
+        else:
+            return [K.tile(initial_state, [1, self.cell.state_size])]
 
     def build(self, input_shapes):
         # input: (N_batch, L, D),  graph: (N_batch, L, L)
@@ -342,7 +341,7 @@ class GraphRNN(_ParametricLayer):
         self.cell.build((input_shapes[0][0], self.cell.units))
         self.built = True
 
-    def call(self, inputs, encode=True, training=None):
+    def call(self, inputs, initial_state=None, training=None):
         """
         Args:
             input[0]: input_layer(N_Batch, L_sequence, Dim_fature)
@@ -350,42 +349,49 @@ class GraphRNN(_ParametricLayer):
         Return:
             output_layer(N_Batch, L_sequence, Dim_feature)
         """
-        if training is not None:
-            raise NotImplementedError('training option is not implemented yet.')
 
-        input_data = inputs[0]
+        if initial_state is not None:
+            pass
+        else:
+            initial_state = self.get_initial_state(inputs[0])
+
+        seq_data = inputs[0]
         graph = inputs[1]
 
-        if len(inputs) == 3:
-            state = inputs[2]
-        else:
-            state = self.get_initial_state(inputs[0])
+        # beta (edge)
+        beta = K.dot(seq_data, self.e_weight)
+        g_beta = K.batch_dot(graph, beta, axes=(2, 1))  # BL(o)L(i),BL(i)D,->BL(o)D
+        print(beta.shape)
 
-        if encode:
-            beta = K.dot(input_data, self.e_weight)
-        else:
-            beta = input_data
-
-        # BL(o)L(i),BL(i)D,->BL(o)D
-        agg_beta = K.batch_dot(graph, beta, axes=(2, 1))
-        # output = (h, [h, c])
-        outputs, states = self.cell.call(beta, [agg_beta, state])
-
-        if self.return_states:
-            return [outputs, states[1]]
-        else:
-            return outputs
+        # last_output, outputs, states = \
+        #     K.rnn(lambda inputs, states: self.cell.call(inputs, states),
+        #           beta,
+        #           initial_state)
+        x = self.cell.call(g_beta, beta)
+        return x[0]
 
     def compute_output_shape(self, input_shape):
-        if self.return_states:
-            return [(input_shape[0][0], input_shape[0][1], self.cell.units),
-                    (input_shape[0][0], input_shape[0][1], self.cell.units)]
-        else:
-            return (input_shape[0][0], input_shape[0][1], self.cell.units)
+        return (input_shape[0][0], input_shape[0][1], self.cell.units)
 
 
-class GraphTimeSeriesRNN():
-    """
-    """
-    def __init__():
-        raise NotImplementedError('GraphTimeSeriesRNN is not implemented yet.')
+
+
+from keras.layers import Input, Flatten, Dense, GRUCell
+from keras.models import Model
+# from keras_extension.layers import GraphConv, GraphRNN
+
+# constants of data shape.
+# Number of data, Number of nodes, Dimension of input, Dimension of latent states.
+N_data = 200
+N_node = 100
+D_input = 50
+D_hidden = 10
+
+
+
+input_layer = Input(shape=(N_node, D_input))  # L, D
+input_graph = Input(shape=(N_node, N_node))  # L, L
+g = GraphRNN(GRUCell(units=D_hidden))
+
+
+x = g([input_layer, input_graph])
