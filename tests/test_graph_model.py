@@ -44,6 +44,13 @@ def _get_model_wrapper(func_graph_layer):
 
 
 @_get_model_wrapper
+def _get_model_graphconv(input_layer, input_graph):
+    """ get model using GraphConv. """
+    g = GraphConv(units=D_hidden)
+    return g([input_layer, input_graph])
+
+
+@_get_model_wrapper
 def _get_model_gru_single(input_layer, input_graph):
     """ get model using GRU. """
     g = GraphRNN(GRUCell(units=D_hidden))
@@ -83,7 +90,7 @@ def _get_simulated_data(random_state=None):
     """
     # set seed (by default, set time()).
     if random_state == None:
-        np.random.seed(int(time.time()))
+        np.random.seed(int((time.time() % 100)*100))
     else:
         np.random.seed(random_state)
 
@@ -103,7 +110,7 @@ def _get_simulated_data(random_state=None):
     return (X, G, y)
 
 
-def _test_graphrnn_with_model(mdl):
+def _test_graph_model(get_model_function):
     """ simple (not real, simulation based) performance test. """
 
     list_auc = []
@@ -114,7 +121,7 @@ def _test_graphrnn_with_model(mdl):
             train_test_split(X, G, y, test_size=0.3)
 
         # model fit & predict
-        # mdl = _get_model_gru_single()
+        mdl = get_model_function()
 
         mdl.fit([X_train, G_train], y_train,
                 validation_data=([X_test, G_test], y_test),
@@ -129,19 +136,24 @@ def _test_graphrnn_with_model(mdl):
     assert((np.array(list_auc) > 0.7).any())
 
 
+def test_graphconv():
+    _test_graph_model(_get_model_graphconv)
+
+
 def test_graphrnn_with_gru_single():
-    _test_graphrnn_with_model(_get_model_gru_single())
+    _test_graph_model(_get_model_gru_single)
 
 
 def test_graphrnn_with_lstm_single():
-    _test_graphrnn_with_model(_get_model_lstm_single())
+    _test_graph_model(_get_model_lstm_single)
 
 
 def test_graphrnn_with_lstm_multi():
-    _test_graphrnn_with_model(_get_model_lstm_single())
+    _test_graph_model(_get_model_lstm_multi)
 
 
 if __name__ == '__main__':
+    test_graphconv()
     test_graphrnn_with_gru_single()
     test_graphrnn_with_lstm_single()
     test_graphrnn_with_lstm_multi()
