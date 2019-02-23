@@ -4,7 +4,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 from keras.layers import Input, Flatten, Dense, GRUCell, LSTMCell
 from keras.models import Model
-from keras_extension.layers import GraphConv, GraphRNN
+from keras_extension.layers import GraphConv, GraphRNN, GraphRRNN
 
 # constants of data shape.
 # Number of data, Number of nodes, Dimension of input, Dimension of latent states.
@@ -36,7 +36,7 @@ def _get_model_wrapper(func_graph_layer):
         output_layer = Flatten()(output_layer)
 
         mdl = Model([input_layer, input_graph], output_layer)
-        mdl.compile(optimizer='rmsprop', loss='binary_crossentropy', metrics=['acc'])
+        mdl.compile(optimizer='adam', loss='binary_crossentropy', metrics=['acc'])
         mdl.summary()
         return mdl
 
@@ -67,12 +67,19 @@ def _get_model_lstm_single(input_layer, input_graph):
 @_get_model_wrapper
 def _get_model_lstm_multi(input_layer, input_graph):
     """ get multi-layer model using LSTM. """
-    # TODO: make GraphTimeSeriesRNN to automate timeseries recurrence.
-    g = GraphRNN(LSTMCell(units=D_hidden), return_states=True)
+    g = GraphRNN(LSTMCell(units=D_hidden), return_state=True)
     x, s = g([input_layer, input_graph])
+    x, s = g([x, input_graph, s], encode=False)
     x, s = g([x, input_graph, s], encode=False)
     x, _ = g([x, input_graph, s], encode=False)
     return x
+
+
+@_get_model_wrapper
+def _get_model_lstm_multi_auto(input_layer, input_graph):
+    """ get multi-layer model using LSTM automaticaly. """
+    g = GraphRRNN(LSTMCell(units=D_hidden), n_layers=4)
+    return g([input_layer, input_graph])
 
 
 def _get_simulated_data(random_state=None):
@@ -105,7 +112,7 @@ def _get_simulated_data(random_state=None):
 
     # If sum of all flow is more than 250, set flag = 1.
     y = np.einsum('ijk,ikl->ij', G, X)
-    y = np.where(y > 250, 1, 0)
+    y = np.where(y > np.median(y), 1, 0)
 
     return (X, G, y)
 
@@ -152,8 +159,13 @@ def test_graphrnn_with_lstm_multi():
     _test_graph_model(_get_model_lstm_multi)
 
 
+def test_graphrnn_with_lstm_multi_auto():
+    _test_graph_model(_get_model_lstm_multi_auto)
+
+
 if __name__ == '__main__':
     test_graphconv()
     test_graphrnn_with_gru_single()
     test_graphrnn_with_lstm_single()
     test_graphrnn_with_lstm_multi()
+    test_graphrnn_with_lstm_multi_auto()
