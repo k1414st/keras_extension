@@ -116,6 +116,49 @@ class _ParametricLayer(Layer):
                                regularizer=self.bias_regularizer,
                                constraint=self.bias_constraint)
 
+    def _graph_attention(self, g, x, w, a):
+        """
+        using graph attention mechanism.
+
+        Args:
+            g: input Tensor of graph adjacency matrix.
+               shape: (B(Batch_size), N(N_nodes), N)
+            x: input Tensor of node-data after convolutioned.
+               shape: (B, N, F_in(F_inputs))
+            w: weight matrix variable
+               (to transform input to attentionable hidden states.)
+               shape: (F_in, F(F_outputs) * H(N_heads))
+            a: merge weight vector from attentionable state to attention value.
+               shape: (2 * F,)
+        """
+        F_in, F, H = w.shape[0], w.shape[1], w.shape[2]
+        N = g.shape[-1]
+
+        # w = K.reshape(F1, H * F2)  # (F_in, H*F)
+        x = K.expand_dims(K.dot(x, w), axis=1)  # (B, 1, H*F)
+        x = K.concatenate([x[:, :, F*i:F*(i+1)]
+                            for i in range(H)], axis=1)  # (B, H, F)
+
+        # concat meshly
+        _x1 = K.tile(K.expand_dims(XX, axis=0), (N, 1, 1, 1))
+        _x2 = K.tile(K.expand_dims(XX, axis=1), (1, N, 1, 1))
+        x = K.concatenate([_x1, _x2], axis=3)  # (N, N, H, 2F)
+
+        def _expand_dims_recursive(x, axis_list):
+            assert(len(axis_list) > 0)
+            if len(axis_list) == 1:
+                return K.expand_dims(x, axis_list[0])
+            return _expand_dims_recursive(K.expand_dims(x, axis_list[0]),
+                                          axis_list=axis_list[1:])
+        # squeeze 2F
+        a = _expand_dims_recursive(a, (0, 0, 0))
+        x = activation(K.sum(x * a, axis=-1))  # (N, N, H)
+
+        # normalize by neighbors
+        x_norm = K.sum(x * K.expand_dims(g, axis=2),
+                    axis=1, keepdims=True)  # (N, 1, H)
+        return x / x_norm  # (N, N, H)
+
 
 class GraphConv(_ParametricLayer):
     """
