@@ -115,7 +115,8 @@ class _ParametricLayer(Layer):
                                initializer=self.bias_initializer,
                                regularizer=self.bias_regularizer,
                                constraint=self.bias_constraint)
-    def _graph_attention(self, g, x, w, a):
+
+    def _graph_attention(self, g, x, w, a, n_heads=1):
         """
         using graph attention mechanism.
 
@@ -130,18 +131,20 @@ class _ParametricLayer(Layer):
             a: merge weight vector from attentionable state to attention value.
                shape: (2 * F,)
         """
-        F_in, F, H = w.shape[0], w.shape[1], w.shape[2]
+        H = n_heads
+        F_in, FH = w.shape[0], w.shape[1]
+        F = FH // H
         N = g.shape[-1]
 
         # w = K.reshape(F1, H * F2)  # (F_in, H*F)
-        x = K.expand_dims(K.dot(x, w), axis=1)  # (B, 1, H*F)
-        x = K.concatenate([x[:, :, F*i:F*(i+1)]
-                            for i in range(H)], axis=1)  # (B, H, F)
+        x = K.expand_dims(K.dot(x, w), axis=2)  # (B, N, 1, H*F)
+        x = K.concatenate([x[:, :, :, F*i:F*(i+1)]
+                           for i in range(H)], axis=2)  # (B, N, H, F)
 
         # concat meshly
-        _x1 = K.tile(K.expand_dims(XX, axis=0), (N, 1, 1, 1))
-        _x2 = K.tile(K.expand_dims(XX, axis=1), (1, N, 1, 1))
-        x = K.concatenate([_x1, _x2], axis=3)  # (N, N, H, 2F)
+        _x1 = K.tile(K.expand_dims(x, axis=1), (1, N, 1, 1, 1))
+        _x2 = K.tile(K.expand_dims(x, axis=2), (1, 1, N, 1, 1))
+        x = K.concatenate([_x1, _x2], axis=4)  # (B, N, N, H, 2F)
 
         def _expand_dims_recursive(x, axis_list):
             assert(len(axis_list) > 0)
@@ -150,13 +153,13 @@ class _ParametricLayer(Layer):
             return _expand_dims_recursive(K.expand_dims(x, axis_list[0]),
                                           axis_list=axis_list[1:])
         # squeeze 2F
-        a = _expand_dims_recursive(a, (0, 0, 0))
-        x = activation(K.sum(x * a, axis=-1))  # (N, N, H)
+        a = _expand_dims_recursive(a, (0, 0, 0, 0))
+        x = K.exp(K.relu(K.sum(x * a, axis=-1), alpha=0.2))  # (B, N, N, H)
 
         # normalize by neighbors
-        x_norm = K.sum(x * K.expand_dims(g, axis=2),
-                    axis=1, keepdims=True)  # (N, 1, H)
-        return x / x_norm  # (N, N, H)
+        x_norm = K.sum(x * K.expand_dims(g, axis=-1),
+                       axis=2, keepdims=True)  # (B, N, 1, H)
+        return x / x_norm  # (B, N, N, H)
 
 
 class GraphConv(_ParametricLayer):
@@ -183,6 +186,7 @@ class GraphConv(_ParametricLayer):
                  use_node_weight=True,
                  activation='sigmoid',
                  use_bias=False,
+                 use_graph_attention=False,
                  bias_initializer='zeros',
                  bias_regularizer=None,
                  bias_constraint=None,
@@ -198,6 +202,7 @@ class GraphConv(_ParametricLayer):
         self.use_node_weight = use_node_weight
         self.activation = activations.get(activation)
         self.use_bias = use_bias
+        self.use_graph_attention = use_graph_attention
 
     def build(self, input_shapes):
         # input: (N_batch, L, D),  graph: (N_batch, L, L)
@@ -211,6 +216,11 @@ class GraphConv(_ParametricLayer):
             self.v_weight = self._add_w((input_size, self.units), 'v')
         if self.use_bias:
             self.bias = self._add_b((self.units,), 'all')
+        # test
+        if self.use_graph_attention:
+            self.att_w_weight = self._add_w((input_size, 5*10), 'att_w')
+            self.att_a_weight = self._add_w((5*2,), 'att_a')
+        # test end
         self.built = True
 
     def call(self, inputs, training=None):
@@ -226,7 +236,18 @@ class GraphConv(_ParametricLayer):
 
         # beta (edge)
         beta = K.dot(seq_data, self.e_weight)
-        beta = K.batch_dot(graph, beta, axes=(2, 1))  # BL(o)L(i),BL(i)D,->BL(o)D
+        if self.use_graph_attention:
+            att_alpha = \
+                self._graph_attention(graph, seq_data, self.att_w_weight,
+                                      self.att_a_weight, n_heads=10)
+            list_att_beta = []
+            print(seq_data.shape, att_alpha.shape)
+            for i in range(3):
+                att_beta = K.batch_dot(att_alpha[:, :, :, i], beta, axes=(2, 1))
+                list_att_beta.append(att_beta)
+            beta = sum(list_att_beta)
+        else:
+            beta = K.batch_dot(graph, beta, axes=(2, 1))  # BL(o)L(i),BL(i)D,->BL(o)D
 
         # connect edge, (node), bias
         out = beta
