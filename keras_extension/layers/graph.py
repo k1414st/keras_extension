@@ -97,12 +97,12 @@ class _ParametricLayer(Layer):
                  kernel_constraint=None,
                  **kwargs):
         super(_ParametricLayer, self).__init__(**kwargs)
-        self.kernel_constraint = constraints.get(kernel_constraint)
         self.bias_initializer = initializers.get(bias_initializer)
         self.bias_regularizer = regularizers.get(bias_regularizer)
         self.bias_constraint = constraints.get(bias_constraint)
         self.kernel_initializer = initializers.get(kernel_initializer)
         self.kernel_regularizer = regularizers.get(kernel_regularizer)
+        self.kernel_constraint = constraints.get(kernel_constraint)
 
     def _add_w(self, shape, name):
         return self.add_weight(shape=shape, name=name+'_weight',
@@ -339,9 +339,7 @@ class GraphRNN(_ParametricLayer):
     Args:
         cell: Set a RNN cell instance. A RNN cell is a class that must have
             call method and state_size attribute.
-        return_states: return states
-            if True, 
-            call method and state_size attribute.
+        return_state: return states or not.
         activation: Activation function of output.
             default: 'sigmoid'
 
@@ -352,7 +350,7 @@ class GraphRNN(_ParametricLayer):
 
     def __init__(self,
                  cell,
-                 return_states=False,
+                 return_state=False,
                  activation='sigmoid',
                  bias_initializer='zeros',
                  bias_regularizer=None,
@@ -366,7 +364,7 @@ class GraphRNN(_ParametricLayer):
             kernel_initializer, kernel_regularizer, kernel_constraint,
             **kwargs)
         self.cell = cell
-        self.return_states = return_states
+        self.return_state = return_state
         self.activation = activations.get(activation)
 
     def get_initial_state(self, inputs):
@@ -414,21 +412,132 @@ class GraphRNN(_ParametricLayer):
         # output = (h, [h, c])
         outputs, states = self.cell.call(beta, [agg_beta, state])
 
-        if self.return_states:
+        if self.return_state:
             return [outputs, states[1]]
         else:
             return outputs
 
+    @property
+    def trainable_weights(self):
+        return [self.e_weight] + self.cell.trainable_weights
+
     def compute_output_shape(self, input_shape):
-        if self.return_states:
+        if self.return_state:
             return [(input_shape[0][0], input_shape[0][1], self.cell.units),
                     (input_shape[0][0], input_shape[0][1], self.cell.units)]
         else:
             return (input_shape[0][0], input_shape[0][1], self.cell.units)
 
 
-class GraphTimeSeriesRNN():
+class GraphRRNN(_ParametricLayer):
     """
+    Graph Recurrent and Time Recurrent Network Layerconnected by
+    user-specified weighted-digraph.
+    when creating object, you can choose recurrent cell (LSTMCell, GRUCell, etc).
+
+    Args:
+        cell: Set a RNN cell instance. A RNN cell is a class that must have
+            call method and state_size attribute.
+        return_state: return states
+        activation: Activation function of output.
+            default: 'sigmoid'
+
+        (bias |kernel)_(initializer |regularizer |constraint):
+            see [https://keras.io/initializers], [https://keras.io/regularizers],
+                [https://keras.io/constraints]
     """
-    def __init__():
-        raise NotImplementedError('GraphTimeSeriesRNN is not implemented yet.')
+
+    def __init__(self,
+                 cell,
+                 n_layers,
+                 return_sequences=False,
+                 output_sequence_axis=-1,
+                 return_state=False,
+                 activation='sigmoid',
+                 bias_initializer='zeros',
+                 bias_regularizer=None,
+                 bias_constraint=None,
+                 kernel_initializer='glorot_uniform',
+                 kernel_regularizer=None,
+                 kernel_constraint=None,
+                 **kwargs):
+        super(GraphRRNN, self).__init__(
+            bias_initializer, bias_regularizer, bias_constraint,
+            kernel_initializer, kernel_regularizer, kernel_constraint,
+            **kwargs)
+        self.cell = cell
+        self.n_layers = n_layers
+        self.return_sequences = return_sequences
+        self.output_sequence_axis = output_sequence_axis
+        self.return_state = return_state
+        self.activation = activations.get(activation)
+        self.grnn_layer = \
+            GraphRNN(cell=cell,
+                     return_state=True,
+                     activation=activation,
+                     bias_initializer=bias_initializer,
+                     bias_regularizer=bias_regularizer,
+                     bias_constraint=bias_constraint,
+                     kernel_initializer=kernel_initializer,
+                     kernel_regularizer=kernel_regularizer,
+                     kernel_constraint=kernel_constraint,
+                     **kwargs)
+
+    def build(self, input_shapes):
+        self.grnn_layer.build(input_shapes)
+        self.built = True
+
+    def call(self, inputs):
+        """
+        Args:
+            input[0]: input_layer(N_Batch, L_sequence, Dim_fature)
+            input[1]: weighted-digraph(L, L) = (from, to)
+        Return:
+            output_layer(N_Batch, L_sequence, Dim_feature)
+        """
+        input_data = inputs[0]
+        graph = inputs[1]
+
+        xs = [None] * self.n_layers
+        ss = [None] * self.n_layers
+
+        xs[0], ss[0] = self.grnn_layer.call([input_data, graph])
+        for i in range(1, self.n_layers):
+            xs[i], ss[i] = \
+                self.grnn_layer.call([xs[i-1], graph, ss[i-1]], encode=False)
+        return xs[self.n_layers-1]
+
+        # return values depend on options.
+        if self.return_sequences:
+            xs = [K.expand_dims(x, axis=self.output_sequence_axis) for x in xs]
+            ss = [K.expand_dims(s, axis=self.output_sequence_axis) for s in ss]
+            if self.return_state:
+                return (K.concatenate(xs, axis=self.output_sequence_axis),
+                        K.concatenate(xs, axis=self.output_sequence_axis))
+            else:
+                return K.concatenate(xs, axis=self.output_sequence_axis)
+        else:
+            if self.return_state:
+                return xs[-1], ys[-1]
+            else:
+                return xs[-1]
+
+    @property
+    def trainable_weights(self):
+        return self.grnn_layer.trainable_weights
+
+    def compute_output_shape(self, input_shape):
+        shape_1 = (input_shape[0][0], input_shape[0][1], self.grnn_layer.cell.units)
+        shape_all = list(shape_1)
+        shape_all.insert(self.output_sequence_axis, self.n_layers)
+
+        if self.return_sequences:
+            if self.return_state:
+                return [shape_all, shape_all]
+            else:
+                return shape_all
+        else:
+            if self.return_state:
+                return [shape_1, shape_1]
+            else:
+                return shape_1
