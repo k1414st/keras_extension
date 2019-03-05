@@ -186,7 +186,8 @@ class GraphConv(_ParametricLayer):
                  use_node_weight=True,
                  activation='sigmoid',
                  use_bias=False,
-                 use_graph_attention=False,
+                 gat_units=None,
+                 gat_n_heads=None,
                  bias_initializer='zeros',
                  bias_regularizer=None,
                  bias_constraint=None,
@@ -202,7 +203,15 @@ class GraphConv(_ParametricLayer):
         self.use_node_weight = use_node_weight
         self.activation = activations.get(activation)
         self.use_bias = use_bias
-        self.use_graph_attention = use_graph_attention
+        if gat_units is not None:
+            if gat_n_heads is not None:
+                self.use_gat = True
+                self.gat_units = gat_units
+                self.gat_n_heads = gat_n_heads
+            else:
+                raise ValueError('set gat_units & gat_n_heads simultaneously.')
+        else:
+            self.use_gat = False
 
     def build(self, input_shapes):
         # input: (N_batch, L, D),  graph: (N_batch, L, L)
@@ -216,11 +225,10 @@ class GraphConv(_ParametricLayer):
             self.v_weight = self._add_w((input_size, self.units), 'v')
         if self.use_bias:
             self.bias = self._add_b((self.units,), 'all')
-        # test
-        if self.use_graph_attention:
-            self.att_w_weight = self._add_w((input_size, 5*10), 'att_w')
-            self.att_a_weight = self._add_w((5*2,), 'att_a')
-        # test end
+        if self.use_gat:
+            self.att_w_weight = \
+                self._add_w((input_size, self.gat_units*self.gat_n_heads), 'att_w')
+            self.att_a_weight = self._add_w((self.gat_units*2,), 'att_a')
         self.built = True
 
     def call(self, inputs, training=None):
@@ -236,13 +244,12 @@ class GraphConv(_ParametricLayer):
 
         # beta (edge)
         beta = K.dot(seq_data, self.e_weight)
-        if self.use_graph_attention:
+        if self.use_gat:
             att_alpha = \
                 self._graph_attention(graph, seq_data, self.att_w_weight,
-                                      self.att_a_weight, n_heads=10)
+                                      self.att_a_weight, n_heads=self.gat_n_heads)
             list_att_beta = []
-            print(seq_data.shape, att_alpha.shape)
-            for i in range(3):
+            for i in range(self.gat_n_heads):
                 att_beta = K.batch_dot(att_alpha[:, :, :, i], beta, axes=(2, 1))
                 list_att_beta.append(att_beta)
             beta = sum(list_att_beta)
