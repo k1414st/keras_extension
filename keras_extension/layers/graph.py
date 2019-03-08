@@ -161,6 +161,21 @@ class _ParametricLayer(Layer):
                        axis=2, keepdims=True)  # (B, N, 1, H)
         return x / x_norm  # (B, N, N, H)
 
+    def _graph_gate(self, x, w):
+        """
+        make a graph gate matrix by crossing each nodes latent states.
+
+        Args:
+            x: input Tensor of node-data after convolutioned.
+               shape: (B(Batch_size), N(N_nodes), F_in(F_inputs))
+            w: weight matrix variable
+               (to transform input to gatable hidden states.)
+               shape: (F_in, F_out(F_outputs))
+        """
+        h = K.dot(x, w)  # (B, N, F_out)
+        hh = K.batch_dot(h, h, axes=(2, 2))  # (B, N, N)
+        return K.sigmoid(hh)  # (B, N, N)
+
 
 class GraphConv(_ParametricLayer):
     """
@@ -186,6 +201,7 @@ class GraphConv(_ParametricLayer):
                  use_node_weight=True,
                  activation='sigmoid',
                  use_bias=False,
+                 gate_units=None,
                  gat_units=None,
                  gat_n_heads=None,
                  bias_initializer='zeros',
@@ -203,6 +219,11 @@ class GraphConv(_ParametricLayer):
         self.use_node_weight = use_node_weight
         self.activation = activations.get(activation)
         self.use_bias = use_bias
+        if gate_units is not None:
+            self.use_gate = True
+            self.gate_units = gate_units
+        else:
+            self.use_gate = False
         if gat_units is not None:
             if gat_n_heads is not None:
                 self.use_gat = True
@@ -225,6 +246,9 @@ class GraphConv(_ParametricLayer):
             self.v_weight = self._add_w((input_size, self.units), 'v')
         if self.use_bias:
             self.bias = self._add_b((self.units,), 'all')
+        if self.use_gate:
+            self.gate_w_weight = \
+                self._add_w((input_size, self.gate_units), 'gate_w')
         if self.use_gat:
             self.att_w_weight = \
                 self._add_w((input_size, self.gat_units*self.gat_n_heads), 'att_w')
@@ -241,6 +265,8 @@ class GraphConv(_ParametricLayer):
         """
         seq_data = inputs[0]
         graph = inputs[1]
+        if self.use_gate:
+            graph = graph * self._graph_gate(seq_data, self.gate_w_weight)
 
         # beta (edge)
         beta = K.dot(seq_data, self.e_weight)

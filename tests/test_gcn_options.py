@@ -117,7 +117,7 @@ def _test_graph_model(get_model_function):
 
         mdl.fit([X_train, G_train], y_train,
                 validation_data=([X_test, G_test], y_test),
-                batch_size=32, epochs=30, verbose=1)
+                batch_size=32, epochs=100, verbose=1)
         y_test_pred = mdl.predict([X_test, G_test])
         auc = roc_auc_score(y_test.ravel(), y_test_pred.ravel())
 
