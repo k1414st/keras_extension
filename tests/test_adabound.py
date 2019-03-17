@@ -5,6 +5,8 @@ from sklearn.metrics import roc_auc_score
 from keras.layers import Input, Flatten, Dense, GRUCell, LSTMCell
 from keras.models import Model
 from keras_extension.layers import GraphConv, GraphRNN, GraphRRNN
+from keras.optimizers import Adam
+from keras_extension.optimizers import AdaBound
 
 # constants of data shape.
 # Number of data, Number of nodes, Dimension of input, Dimension of latent states.
@@ -38,7 +40,9 @@ def _get_model_wrapper(func_graph_layer):
         output_layer = Flatten()(output_layer)
 
         mdl = Model([input_layer, input_graph], output_layer)
-        mdl.compile(optimizer='adam', loss='binary_crossentropy', metrics=['acc'])
+        # opt = Adam()
+        opt = AdaBound()
+        mdl.compile(optimizer=opt, loss='binary_crossentropy', metrics=['acc'])
         mdl.summary()
         return mdl
 
@@ -117,7 +121,7 @@ def _test_graph_model(get_model_function):
 
         mdl.fit([X_train, G_train], y_train,
                 validation_data=([X_test, G_test], y_test),
-                batch_size=32, epochs=100, verbose=1)
+                batch_size=32, epochs=200, verbose=1)
         y_test_pred = mdl.predict([X_test, G_test])
         auc = roc_auc_score(y_test.ravel(), y_test_pred.ravel())
 
@@ -141,6 +145,4 @@ def test_gat():
 
 
 if __name__ == '__main__':
-    test_graphconv()
     test_gate()
-    test_gat()
