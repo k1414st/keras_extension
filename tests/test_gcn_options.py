@@ -141,6 +141,6 @@ def test_gat():
 
 
 if __name__ == '__main__':
-    test_graphconv()
+    # test_graphconv()
     test_gate()
-    test_gat()
+    # test_gat()
