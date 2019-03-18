@@ -41,7 +41,7 @@ def _get_model_wrapper(func_graph_layer):
 
         mdl = Model([input_layer, input_graph], output_layer)
         # opt = Adam()
-        opt = AdaBound()
+        opt = AdaBound(terminal_bound=0.01)
         mdl.compile(optimizer=opt, loss='binary_crossentropy', metrics=['acc'])
         mdl.summary()
         return mdl
@@ -121,7 +121,7 @@ def _test_graph_model(get_model_function):
 
         mdl.fit([X_train, G_train], y_train,
                 validation_data=([X_test, G_test], y_test),
-                batch_size=32, epochs=200, verbose=1)
+                batch_size=32, epochs=500, verbose=1)
         y_test_pred = mdl.predict([X_test, G_test])
         auc = roc_auc_score(y_test.ravel(), y_test_pred.ravel())
 
