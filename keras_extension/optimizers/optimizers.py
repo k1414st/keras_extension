@@ -71,10 +71,10 @@ class AdaBound(Optimizer):
 
             eta_l_t = self.terminal_bound - \
                 (self.terminal_bound - self.lower_bound) / \
-                (self.beta_2 * t + 1)
+                ((1. - self.beta_2) * t + 1)
             eta_u_t = self.terminal_bound + \
                 (self.upper_bound - self.terminal_bound) / \
-                (self.beta_2 * t)
+                ((1. - self.beta_2) * t)
 
             clipped_lr_t = K.minimum(
                 K.maximum(lr_t / (K.sqrt(v_t) + self.epsilon), eta_l_t), eta_u_t)
