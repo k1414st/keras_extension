@@ -16,10 +16,16 @@ def get_model(test_list_case=False):
 
     def sparse_matmul(x):
         w = tf.Variable(tf.zeros([2048, 1]), dtype=tf.float32)
-        xx = tf.sparse.matmul(x, w)
-        return xx
+        if not test_list_case:
+            return tf.sparse.matmul(x, w)
+        else:
+            return tf.sparse.matmul(x[0], w)
 
-    output_layer = Lambda(sparse_matmul)(x)
+    if not test_list_case:
+        output_layer = Lambda(sparse_matmul)(x)
+    else:
+        output_layer = Lambda(sparse_matmul)([x, x])
+
     model = Model(input_layer, output_layer)
     model.compile('adam', 'mse')
     model.summary()
