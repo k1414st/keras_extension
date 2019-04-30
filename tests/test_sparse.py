@@ -33,16 +33,17 @@ def get_model(test_list_case=False):
 
 
 x = np.random.binomial(n=1, p=0.01, size=(100, 2048)).astype(np.float32)
+x = csr_matrix(x)
 y = np.random.binomial(n=1, p=0.5, size=(100, 1)).astype(np.float32)
 
 def test_single_case():
     model = get_model()
-    model.fit(csr_matrix(x), y, batch_size=2)
+    model.fit(x, y, batch_size=2)
     return True
 
 def test_list_case():
     model = get_model(test_list_case=True)
-    model.fit(csr_matrix(x), y, batch_size=2)
+    model.fit(x, y, batch_size=2)
     return True
 
 
