@@ -11,6 +11,7 @@ keras_extension/activations/__init__.py
 keras_extension/activations/activations.py
 keras_extension/layers/__init__.py
 keras_extension/layers/core_sparse.py
+keras_extension/layers/core_sparse_tf.py
 keras_extension/layers/graph.py
 keras_extension/layers/layer.py
 keras_extension/layers/mac.py

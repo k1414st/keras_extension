@@ -1,21 +1,25 @@
 import numpy as np
 from scipy.sparse.csr import csr_matrix
-from keras.layers import Input, Dense
+from keras.layers import Input
 from keras.models import Model
 from keras_extension.layers import Lambda
-# from keras.layers import Lambda
 
 import tensorflow as tf
 
+SPARSITY = 0.01
+N_DATA = 100
+BATCH_SIZE = 2
+DIM_SPARSE = 2**16
+
+##################################################################################
 
 def get_model(test_list_case=False):
     """ get sparse-adaptive model """
-    input_layer = Input(batch_shape=(2, 2048), sparse=True)
+    input_layer = Input(batch_shape=(BATCH_SIZE, DIM_SPARSE), sparse=True)
     x = input_layer
-    # output_layer = Dense(units=1)(x)
 
     def sparse_matmul(x):
-        w = tf.Variable(tf.zeros([2048, 1]), dtype=tf.float32)
+        w = tf.Variable(tf.zeros([DIM_SPARSE, 1]), dtype=tf.float32)
         if not test_list_case:
             return tf.sparse.matmul(x, w)
         else:
@@ -32,9 +36,10 @@ def get_model(test_list_case=False):
     return model
 
 # making dummy data (x is sparse matrix).
-x = np.random.binomial(n=1, p=0.01, size=(100, 2048)).astype(np.float32)
+x = np.random.binomial(n=1, p=SPARSITY,
+                       size=(N_DATA, DIM_SPARSE)).astype(np.float32)
 x = csr_matrix(x)
-y = np.random.binomial(n=1, p=0.5, size=(100, 1)).astype(np.float32)
+y = np.random.binomial(n=1, p=0.5, size=(N_DATA, 1)).astype(np.float32)
 
 
 def test_single_case():

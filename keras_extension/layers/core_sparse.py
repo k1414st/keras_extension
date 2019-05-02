@@ -1,32 +1,37 @@
 # -*- coding: utf-8 -*-
-"""Core Keras layers.
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-import numpy as np
-
-import copy
+Customized Core Keras layers.
+"""
 import types as python_types
 import warnings
 
 from keras import backend as K
-from keras import activations
-from keras import initializers
-from keras import regularizers
-from keras import constraints
-from keras.engine.base_layer import InputSpec
 from keras.engine.base_layer import Layer
 from keras.utils.generic_utils import func_dump
 from keras.utils.generic_utils import func_load
 from keras.utils.generic_utils import deserialize_keras_object
 from keras.utils.generic_utils import has_arg
-from keras.utils import conv_utils
 from keras.legacy import interfaces
 
 
-class Lambda(Layer):
+class SparseLayer(Layer):
+    """ Wraps Layer to distinguish whether input is sparse or not. """
+    def __init__(self, *args, **kwargs):
+        return super().__init__(*args, **kwargs)
+
+    def __call__(self, inputs, *args, **kwargs):
+        """ 
+        wraps __call__ to distinguish whether input is sparse or not.
+        sparse flag is set as "self._is_sparse".
+        """
+        if isinstance(inputs, (list, tuple)):
+            self._is_sparse = [K.is_sparse(inp) for inp in inputs]
+        else:
+            self._is_sparse = K.is_sparse(inputs)
+        return super().__call__(inputs, *args, **kwargs)
+
+
+class Lambda(SparseLayer):
     """Wraps arbitrary expression as a `Layer` object.
 
     This code is mostly copied from original Lambda class,
@@ -90,7 +95,8 @@ class Lambda(Layer):
     @interfaces.legacy_lambda_support
     def __init__(self, function, output_shape=None,
                  mask=None, arguments=None, **kwargs):
-        super(Lambda, self).__init__(**kwargs)
+        # super(Lambda, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.function = function
         self.arguments = arguments if arguments else {}
         if mask is not None:
@@ -113,10 +119,10 @@ class Lambda(Layer):
             if K.backend() in ('tensorflow', 'cntk'):
                 if isinstance(input_shape, list):
                     xs = [K.placeholder(shape=shape, sparse=is_sparse)
-                          for shape, is_sparse in zip(input_shape, self.__is_sparse)]
+                          for shape, is_sparse in zip(input_shape, self._is_sparse)]
                     x = self.call(xs)
                 else:
-                    x = K.placeholder(shape=input_shape, sparse=self.__is_sparse)
+                    x = K.placeholder(shape=input_shape, sparse=self._is_sparse)
                     x = self.call(x)
                 if isinstance(x, list):
                     return [K.int_shape(x_elem) for x_elem in x]
@@ -148,12 +154,12 @@ class Lambda(Layer):
                     shape = tuple(shape)
             return shape
 
-    def __call__(self, inputs, **kwargs):
-        if isinstance(inputs, list):
-            self.__is_sparse = [K.is_sparse(inp) for inp in inputs]
-        else:
-            self.__is_sparse = K.is_sparse(inputs)
-        return super(Lambda, self).__call__(inputs, **kwargs)
+    # def __call__(self, inputs, **kwargs):
+    #     if isinstance(inputs, list):
+    #         self.__is_sparse = [K.is_sparse(inp) for inp in inputs]
+    #     else:
+    #         self.__is_sparse = K.is_sparse(inputs)
+    #     return super().__call__(inputs, **kwargs)
 
     def call(self, inputs, mask=None):
         arguments = self.arguments
@@ -189,7 +195,7 @@ class Lambda(Layer):
                   'output_shape': output_shape,
                   'output_shape_type': output_shape_type,
                   'arguments': self.arguments}
-        base_config = super(Lambda, self).get_config()
+        base_config = super().get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
     @classmethod
