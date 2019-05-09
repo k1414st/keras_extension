@@ -14,7 +14,7 @@ from keras.utils.generic_utils import has_arg
 from keras.legacy import interfaces
 
 
-class SparseLayer(Layer):
+class SparsableLayer(Layer):
     """ Wraps Layer to distinguish whether input is sparse or not. """
     def __init__(self, *args, **kwargs):
         return super().__init__(*args, **kwargs)
@@ -31,7 +31,7 @@ class SparseLayer(Layer):
         return super().__call__(inputs, *args, **kwargs)
 
 
-class Lambda(SparseLayer):
+class Lambda(SparsableLayer):
     """Wraps arbitrary expression as a `Layer` object.
 
     This code is mostly copied from original Lambda class,
@@ -153,13 +153,6 @@ class Lambda(SparseLayer):
                 if isinstance(shape[0], int) or shape[0] is None:
                     shape = tuple(shape)
             return shape
-
-    # def __call__(self, inputs, **kwargs):
-    #     if isinstance(inputs, list):
-    #         self.__is_sparse = [K.is_sparse(inp) for inp in inputs]
-    #     else:
-    #         self.__is_sparse = K.is_sparse(inputs)
-    #     return super().__call__(inputs, **kwargs)
 
     def call(self, inputs, mask=None):
         arguments = self.arguments

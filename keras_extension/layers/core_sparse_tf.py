@@ -13,10 +13,10 @@ from keras.engine.base_layer import Layer
 from keras.legacy import interfaces
 
 import tensorflow as tf
-from .core_sparse import SparseLayer
+from .core_sparse import SparsableLayer
 
 
-class Dense(SparseLayer):
+class Dense(SparsableLayer):
     """Just your regular densely-connected NN layer.
 
     This code is mostly copied from original Lambda class,
@@ -137,13 +137,6 @@ class Dense(SparseLayer):
         else:
             self.input_spec = InputSpec(min_ndim=2, axes={-1: input_dim})
         self.built = True
-
-    # def __call__(self, inputs, **kwargs):
-    #     if isinstance(inputs, list):
-    #         self._is_sparse = [K.is_sparse(inp) for inp in inputs]
-    #     else:
-    #         self._is_sparse = K.is_sparse(inputs)
-    #     return super().__call__(inputs, **kwargs)
 
     def call(self, inputs):
         if self._is_sparse:
