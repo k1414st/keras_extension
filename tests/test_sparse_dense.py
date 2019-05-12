@@ -4,7 +4,7 @@ from keras.layers import Input, Flatten
 from keras.models import Model
 import tensorflow as tf
 
-from keras_extension.layers import Dense
+from keras_extension.layers import Dense, SparseReshapeDense
 
 SPARSITY = 0.01
 N_DATA = 100
@@ -30,7 +30,7 @@ def get_model_fold():
     """ get sparse-adaptive fold model """
     input_layer = Input(shape=(DIM_SPARSE,), sparse=True)
     x = input_layer
-    x = Dense(units=10, fold_shape=(32, 2, 1024))(x)
+    x = SparseReshapeDense(reshape=(32, 2, 1024), units=10)(x)
     x = Flatten()(x)
     output_layer = Dense(units=1)(x)
 

@@ -85,6 +85,7 @@ class Dense(SparsableLayer):
 
     @interfaces.legacy_dense_support
     def __init__(self, units,
+                 fold_shape=None,
                  activation=None,
                  use_bias=True,
                  kernel_initializer='glorot_uniform',
@@ -100,6 +101,7 @@ class Dense(SparsableLayer):
             kwargs['input_shape'] = (kwargs.pop('input_dim'),)
         super().__init__(**kwargs)
         self.units = units
+        self.fold_shape = fold_shape
         self.activation = activations.get(activation)
         self.use_bias = use_bias
         self.kernel_initializer = initializers.get(kernel_initializer)
@@ -117,8 +119,13 @@ class Dense(SparsableLayer):
 
     def build(self, input_shape):
         assert len(input_shape) >= 2
-        input_dim = input_shape[-1]
-
+        if (self.fold_shape is not None) and (not self._is_sparse):
+            raise ValueError('fold_shape must be set with sparse input')
+        
+        if self.fold_shape is not None:
+            input_dim = self.fold_shape[-1]
+        else:
+            input_dim = input_shape[-1]
         self.kernel = self.add_weight(shape=(input_dim, self.units),
                                       initializer=self.kernel_initializer,
                                       name='kernel',
@@ -132,6 +139,7 @@ class Dense(SparsableLayer):
                                         constraint=self.bias_constraint)
         else:
             self.bias = None
+
         if self._is_sparse:
             self.input_spec = InputSpec(axes={-1: input_shape[-1]})
         else:
@@ -140,11 +148,19 @@ class Dense(SparsableLayer):
 
     def call(self, inputs):
         if self._is_sparse:
-            output = tf.sparse.matmul(inputs, self.kernel)
+            if self.fold_shape is None:
+                output = tf.sparse.matmul(inputs, self.kernel)
+            else:
+                inputs = tf.sparse_reshape(inputs, (-1, self.fold_shape[-1]))
+                output = tf.sparse.matmul(inputs, self.kernel)
         else:
             output = K.dot(inputs, self.kernel)
         if self.use_bias:
             output = K.bias_add(output, self.bias, data_format='channels_last')
+        if self.fold_shape is not None:
+            output_shape = [-1] + list(self.fold_shape)
+            output_shape[-1] = self.units
+            output = tf.reshape(output, output_shape)
         if self.activation is not None:
             output = self.activation(output)
         return output
@@ -152,7 +168,10 @@ class Dense(SparsableLayer):
     def compute_output_shape(self, input_shape):
         assert input_shape and len(input_shape) >= 2
         assert input_shape[-1]
-        output_shape = list(input_shape)
+        if self.fold_shape is None:
+            output_shape = list(input_shape)
+        else:
+            output_shape = [None] + list(self.fold_shape)
         output_shape[-1] = self.units
         return tuple(output_shape)
 
@@ -172,89 +191,4 @@ class Dense(SparsableLayer):
         }
         base_config = super().get_config()
         return dict(list(base_config.items()) + list(config.items()))
-
-
-class SparseReshapeDense(Dense):
-    """
-    Extention for folded 2D sparse input multiplication.
-    If input shape is represented as (batch_size, prod(reshape)),
-    reshape the input to (batch_size, *reshape), and
-    apply Dense Unit.
-
-    Added Args:
-        reshape: folded shape (reshape input by this).
-    Returns:
-        Densed Tensor: (batch_size, *reshape[-1:], dense.units)
-    """
-
-    @interfaces.legacy_dense_support
-    def __init__(self, units,
-                 reshape,
-                 activation=None,
-                 use_bias=True,
-                 kernel_initializer='glorot_uniform',
-                 bias_initializer='zeros',
-                 kernel_regularizer=None,
-                 bias_regularizer=None,
-                 activity_regularizer=None,
-                 kernel_constraint=None,
-                 bias_constraint=None,
-                 sparse=None,
-                 **kwargs):
-        super().__init__(units=units,
-                         activation=activation,
-                         use_bias=use_bias,
-                         kernel_initializer=kernel_initializer,
-                         bias_initializer=bias_initializer,
-                         kernel_regularizer=kernel_regularizer,
-                         bias_regularizer=bias_regularizer,
-                         activity_regularizer=activity_regularizer,
-                         kernel_constraint=kernel_constraint,
-                         bias_constraint=bias_constraint,
-                         sparse=True,
-                         **kwargs)
-        self.reshape = reshape
-
-    def build(self, input_shape):
-        assert len(input_shape) >= 2
-        if not self._is_sparse:
-            raise ValueError('input must be 2d sparse matrix.')
-        
-        input_dim = self.reshape[-1]
-        self.kernel = self.add_weight(shape=(input_dim, self.units),
-                                      initializer=self.kernel_initializer,
-                                      name='kernel',
-                                      regularizer=self.kernel_regularizer,
-                                      constraint=self.kernel_constraint)
-        if self.use_bias:
-            self.bias = self.add_weight(shape=(self.units,),
-                                        initializer=self.bias_initializer,
-                                        name='bias',
-                                        regularizer=self.bias_regularizer,
-                                        constraint=self.bias_constraint)
-        else:
-            self.bias = None
-
-        if self._is_sparse:
-            self.input_spec = InputSpec(axes={-1: input_shape[-1]})
-        else:
-            self.input_spec = InputSpec(min_ndim=2, axes={-1: input_shape[-1]})
-        self.built = True
-
-    def call(self, inputs):
-        output = super().call(tf.sparse_reshape(inputs, (-1, self.reshape[-1])))
-        output_shape = [-1] + list(self.reshape)
-        output_shape[-1] = self.units
-        output = tf.reshape(output, output_shape)
-        if self.activation is not None:
-            output = self.activation(output)
-        return output
-
-    def compute_output_shape(self, input_shape):
-        assert input_shape and len(input_shape) >= 2
-        assert input_shape[-1]
-        output_shape = [None] + list(self.reshape)
-        output_shape[-1] = self.units
-        return tuple(output_shape)
-
 
