@@ -85,6 +85,7 @@ class Dense(SparsableLayer):
 
     @interfaces.legacy_dense_support
     def __init__(self, units,
+                 fold_shape=None,
                  activation=None,
                  use_bias=True,
                  kernel_initializer='glorot_uniform',
@@ -100,6 +101,7 @@ class Dense(SparsableLayer):
             kwargs['input_shape'] = (kwargs.pop('input_dim'),)
         super().__init__(**kwargs)
         self.units = units
+        self.fold_shape = fold_shape
         self.activation = activations.get(activation)
         self.use_bias = use_bias
         self.kernel_initializer = initializers.get(kernel_initializer)
@@ -117,8 +119,13 @@ class Dense(SparsableLayer):
 
     def build(self, input_shape):
         assert len(input_shape) >= 2
-        input_dim = input_shape[-1]
-
+        if (self.fold_shape is not None) and (not self._is_sparse):
+            raise ValueError('fold_shape must be set with sparse input')
+        
+        if self.fold_shape is not None:
+            input_dim = self.fold_shape[1]
+        else:
+            input_dim = input_shape[-1]
         self.kernel = self.add_weight(shape=(input_dim, self.units),
                                       initializer=self.kernel_initializer,
                                       name='kernel',
@@ -132,19 +139,26 @@ class Dense(SparsableLayer):
                                         constraint=self.bias_constraint)
         else:
             self.bias = None
+
         if self._is_sparse:
-            self.input_spec = InputSpec(axes={-1: input_dim})
+            self.input_spec = InputSpec(axes={-1: input_shape[-1]})
         else:
-            self.input_spec = InputSpec(min_ndim=2, axes={-1: input_dim})
+            self.input_spec = InputSpec(min_ndim=2, axes={-1: input_shape[-1]})
         self.built = True
 
     def call(self, inputs):
         if self._is_sparse:
-            output = tf.sparse.matmul(inputs, self.kernel)
+            if self.fold_shape is None:
+                output = tf.sparse.matmul(inputs, self.kernel)
+            else:
+                inputs = tf.sparse_reshape(inputs, (-1, self.fold_shape[1]))
+                output = tf.sparse.matmul(inputs, self.kernel)
         else:
             output = K.dot(inputs, self.kernel)
         if self.use_bias:
             output = K.bias_add(output, self.bias, data_format='channels_last')
+        if self.fold_shape is not None:
+            output = tf.reshape(output, (-1, self.fold_shape[0]*self.units))
         if self.activation is not None:
             output = self.activation(output)
         return output
@@ -154,6 +168,8 @@ class Dense(SparsableLayer):
         assert input_shape[-1]
         output_shape = list(input_shape)
         output_shape[-1] = self.units
+        if self.fold_shape is not None:
+            output_shape[-1] *= self.fold_shape[0]
         return tuple(output_shape)
 
     def get_config(self):
