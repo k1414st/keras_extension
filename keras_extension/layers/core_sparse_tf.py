@@ -246,8 +246,6 @@ class SparseReshapeDense(Dense):
         output_shape = [-1] + list(self.reshape)
         output_shape[-1] = self.units
         output = tf.reshape(output, output_shape)
-        if self.activation is not None:
-            output = self.activation(output)
         return output
 
     def compute_output_shape(self, input_shape):
