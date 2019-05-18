@@ -12,11 +12,11 @@ keras_extension/activations/activations.py
 keras_extension/layers/__init__.py
 keras_extension/layers/core_sparse.py
 keras_extension/layers/core_sparse_tf.py
-keras_extension/layers/core_sparse_tf_bak.py
 keras_extension/layers/graph.py
 keras_extension/layers/layer.py
 keras_extension/layers/mac.py
 keras_extension/layers/merge.py
+keras_extension/layers/merge_org.py
 keras_extension/layers/partial_convolutional.py
 keras_extension/optimizers/__init__.py
 keras_extension/optimizers/optimizers.py

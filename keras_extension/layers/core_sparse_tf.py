@@ -11,6 +11,7 @@ from keras import constraints
 from keras.engine.base_layer import InputSpec
 from keras.engine.base_layer import Layer
 from keras.legacy import interfaces
+from keras.layers.merge import _Merge
 
 import tensorflow as tf
 from .core_sparse import SparsableLayer
@@ -256,3 +257,65 @@ class SparseReshapeDense(Dense):
         return tuple(output_shape)
 
 
+class SparseReshapeDot(_Merge):
+    """
+    Layer that computes a dot product between
+    pseudo multi-dimensional sparse_tensor and 2d dense matrix.
+    sparse_tensor internally has shape (N, a, b, ..., k),
+    but must be reshaped (N, a*b*...*k) beforehand.
+
+    restriction:
+        1. dense_matrix must be 2-dim.
+        2. batch_dot option is not implemented yet.
+
+    Args:
+        reshape: internal shape (a, b, ..., k)
+    """
+
+    def __init__(self, reshape, **kwargs):
+        super(SparseReshapeDot, self).__init__(**kwargs)
+        self.reshape = reshape
+        self.supports_masking = True
+        self._reshape_required = False
+
+    def build(self, input_shape):
+        # Used purely for shape validation.
+        if not isinstance(input_shape, list) or len(input_shape) != 2:
+            raise ValueError('A `Dot` layer should be called '
+                             'on a list of 2 inputs.')
+        shape1 = input_shape[0]  # n(Ij)
+        shape2 = input_shape[1]  # njK
+        assert(len(shape1) == 2)
+        assert(len(shape2) == 2)
+        print(shape1, shape2)  # (None, 65536), (1024, 1)
+        self.__output_shape \
+            = tuple([None] + list(self.reshape[:-1]) + [shape2[-1]])
+
+
+    def _merge_function(self, inputs):
+        if len(inputs) != 2:
+            raise ValueError('A `Dot` layer should be called '
+                             'on exactly 2 inputs')
+        x1 = inputs[0]
+        x2 = inputs[1]
+        x1 = tf.sparse_reshape(x1, (-1, self.reshape[-1]))
+        output = tf.sparse.matmul(x1, x2)
+        output = K.reshape(output, [-1] + list(self.__output_shape[1:]))
+        return output
+
+
+    def compute_output_shape(self, input_shape):
+        if not isinstance(input_shape, list) or len(input_shape) != 2:
+            raise ValueError('A `Dot` layer should be called '
+                             'on a list of 2 inputs.')
+        return tuple(self.__output_shape)
+
+    def compute_mask(self, inputs, mask=None):
+        return None
+
+    def get_config(self):
+        config = {
+            'axes': self.axes,
+        }
+        base_config = super(SparseReshapeDot, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
