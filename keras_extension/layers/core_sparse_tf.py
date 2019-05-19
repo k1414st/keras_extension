@@ -283,11 +283,11 @@ class SparseReshapeDot(_Merge):
         if not isinstance(input_shape, list) or len(input_shape) != 2:
             raise ValueError('A `Dot` layer should be called '
                              'on a list of 2 inputs.')
-        shape1 = input_shape[0]  # n(Ij)
-        shape2 = input_shape[1]  # njK
+        # n(Ij).jk -> nIk
+        shape1 = input_shape[0]
+        shape2 = input_shape[1]
         assert(len(shape1) == 2)
         assert(len(shape2) == 2)
-        print(shape1, shape2)  # (None, 65536), (1024, 1)
         self.__output_shape \
             = tuple([None] + list(self.reshape[:-1]) + [shape2[-1]])
 
