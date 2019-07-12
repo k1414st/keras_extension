@@ -159,17 +159,8 @@ class GraphConv(_ParametricLayer):
                  gate_mode=None,
                  gat_units=None,
                  gat_n_heads=None,
-                 bias_initializer='zeros',
-                 bias_regularizer=None,
-                 bias_constraint=None,
-                 kernel_initializer='glorot_uniform',
-                 kernel_regularizer=None,
-                 kernel_constraint=None,
                  **kwargs):
-        super(GraphConv, self).__init__(
-            bias_initializer, bias_regularizer, bias_constraint,
-            kernel_initializer, kernel_regularizer, kernel_constraint,
-            **kwargs)
+        super(GraphConv, self).__init__(**kwargs)
         self.units = units
         self.use_node_weight = use_node_weight
         self.activation = activations.get(activation)
@@ -289,17 +280,8 @@ class GraphRNN(_ParametricLayer):
                  cell,
                  return_state=False,
                  activation='sigmoid',
-                 bias_initializer='zeros',
-                 bias_regularizer=None,
-                 bias_constraint=None,
-                 kernel_initializer='glorot_uniform',
-                 kernel_regularizer=None,
-                 kernel_constraint=None,
                  **kwargs):
-        super(GraphRNN, self).__init__(
-            bias_initializer, bias_regularizer, bias_constraint,
-            kernel_initializer, kernel_regularizer, kernel_constraint,
-            **kwargs)
+        super(GraphRNN, self).__init__(**kwargs)
         self.cell = cell
         self.return_state = return_state
         self.activation = activations.get(activation)
@@ -391,17 +373,8 @@ class GraphRRNN(_ParametricLayer):
                  output_sequence_axis=-1,
                  return_state=False,
                  activation='sigmoid',
-                 bias_initializer='zeros',
-                 bias_regularizer=None,
-                 bias_constraint=None,
-                 kernel_initializer='glorot_uniform',
-                 kernel_regularizer=None,
-                 kernel_constraint=None,
                  **kwargs):
-        super(GraphRRNN, self).__init__(
-            bias_initializer, bias_regularizer, bias_constraint,
-            kernel_initializer, kernel_regularizer, kernel_constraint,
-            **kwargs)
+        super(GraphRRNN, self).__init__(**kwargs)
         self.cell = cell
         self.n_layers = n_layers
         self.return_sequences = return_sequences
@@ -412,12 +385,6 @@ class GraphRRNN(_ParametricLayer):
             GraphRNN(cell=cell,
                      return_state=True,
                      activation=activation,
-                     bias_initializer=bias_initializer,
-                     bias_regularizer=bias_regularizer,
-                     bias_constraint=bias_constraint,
-                     kernel_initializer=kernel_initializer,
-                     kernel_regularizer=kernel_regularizer,
-                     kernel_constraint=kernel_constraint,
                      **kwargs)
 
     def build(self, input_shapes):
