@@ -67,68 +67,6 @@ class _ParametricLayer(Layer):
                                regularizer=self.bias_regularizer,
                                constraint=self.bias_constraint)
 
-    def _graph_attention(self, g, x, w, a, n_heads=1):
-        """
-        using graph attention mechanism.
-
-        Args:
-            g: input Tensor of graph adjacency matrix.
-               shape: (B(Batch_size), N(N_nodes), N)
-            x: input Tensor of node-data after convolutioned.
-               shape: (B, N, F_in(F_inputs))
-            w: weight matrix variable
-               (to transform input to attentionable hidden states.)
-               shape: (F_in, F(F_outputs) * H(N_heads))
-            a: merge weight vector from attentionable state to attention value.
-               shape: (2 * F,)
-        """
-        H = n_heads
-        F_in, FH = w.shape[0], w.shape[1]
-        F = FH // H
-        N = g.shape[-1]
-
-        # w = K.reshape(F1, H * F2)  # (F_in, H*F)
-        x = K.expand_dims(K.dot(x, w), axis=2)  # (B, N, 1, H*F)
-        x = K.concatenate([x[:, :, :, F*i:F*(i+1)]
-                           for i in range(H)], axis=2)  # (B, N, H, F)
-
-        # concat meshly
-        _x1 = K.tile(K.expand_dims(x, axis=1), (1, N, 1, 1, 1))
-        _x2 = K.tile(K.expand_dims(x, axis=2), (1, 1, N, 1, 1))
-        x = K.concatenate([_x1, _x2], axis=4)  # (B, N, N, H, 2F)
-
-        def _expand_dims_recursive(x, axis_list):
-            assert(len(axis_list) > 0)
-            if len(axis_list) == 1:
-                return K.expand_dims(x, axis_list[0])
-            return _expand_dims_recursive(K.expand_dims(x, axis_list[0]),
-                                          axis_list=axis_list[1:])
-        # squeeze 2F
-        a = _expand_dims_recursive(a, (0, 0, 0, 0))
-        x = K.exp(K.relu(K.sum(x * a, axis=-1), alpha=0.2))  # (B, N, N, H)
-
-        # normalize by neighbors
-        x_norm = K.sum(x * K.expand_dims(g, axis=-1),
-                       axis=2, keepdims=True)  # (B, N, 1, H)
-        return x / x_norm  # (B, N, N, H)
-
-    def _graph_gate(self, x, w1, w2=None):
-        """
-        make a graph gate matrix by crossing each nodes latent states.
-
-        Args:
-            x: input Tensor of node-data after convolutioned.
-               shape: (B(Batch_size), N(N_nodes), F_in(F_inputs))
-            w1, w2: weight matrix variable
-               (to transform input to gatable hidden states.)
-               shape: (F_in, F_out(F_outputs))
-        """
-        if w2 is None:
-            w2 = w1
-        h1 = K.dot(x, w1)  # (B, N, F_out)
-        h2 = K.dot(x, w2)  # (B, N, F_out)
-        hh = K.batch_dot(h1, h2, axes=(2, 2))  # (B, N, N)
-        return K.sigmoid(hh)  # (B, N, N)
 
 
 class GraphConv(_ParametricLayer):
@@ -212,6 +150,69 @@ class GraphConv(_ParametricLayer):
             self.att_a_weight = self._add_w((self.gat_units*2,), 'att_a')
         self.built = True
 
+    def __graph_attention(self, g, x, w, a, n_heads=1):
+        """
+        using graph attention mechanism.
+
+        Args:
+            g: input Tensor of graph adjacency matrix.
+               shape: (B(Batch_size), N(N_nodes), N)
+            x: input Tensor of node-data after convolutioned.
+               shape: (B, N, F_in(F_inputs))
+            w: weight matrix variable
+               (to transform input to attentionable hidden states.)
+               shape: (F_in, F(F_outputs) * H(N_heads))
+            a: merge weight vector from attentionable state to attention value.
+               shape: (2 * F,)
+        """
+        H = n_heads
+        F_in, FH = w.shape[0], w.shape[1]
+        F = FH // H
+        N = g.shape[-1]
+
+        # w = K.reshape(F1, H * F2)  # (F_in, H*F)
+        x = K.expand_dims(K.dot(x, w), axis=2)  # (B, N, 1, H*F)
+        x = K.concatenate([x[:, :, :, F*i:F*(i+1)]
+                           for i in range(H)], axis=2)  # (B, N, H, F)
+
+        # concat meshly
+        _x1 = K.tile(K.expand_dims(x, axis=1), (1, N, 1, 1, 1))
+        _x2 = K.tile(K.expand_dims(x, axis=2), (1, 1, N, 1, 1))
+        x = K.concatenate([_x1, _x2], axis=4)  # (B, N, N, H, 2F)
+
+        def _expand_dims_recursive(x, axis_list):
+            assert(len(axis_list) > 0)
+            if len(axis_list) == 1:
+                return K.expand_dims(x, axis_list[0])
+            return _expand_dims_recursive(K.expand_dims(x, axis_list[0]),
+                                          axis_list=axis_list[1:])
+        # squeeze 2F
+        a = _expand_dims_recursive(a, (0, 0, 0, 0))
+        x = K.exp(K.relu(K.sum(x * a, axis=-1), alpha=0.2))  # (B, N, N, H)
+
+        # normalize by neighbors
+        x_norm = K.sum(x * K.expand_dims(g, axis=-1),
+                       axis=2, keepdims=True)  # (B, N, 1, H)
+        return x / x_norm  # (B, N, N, H)
+
+    def __graph_gate(self, x, w1, w2=None):
+        """
+        make a graph gate matrix by crossing each nodes latent states.
+
+        Args:
+            x: input Tensor of node-data after convolutioned.
+               shape: (B(Batch_size), N(N_nodes), F_in(F_inputs))
+            w1, w2: weight matrix variable
+               (to transform input to gatable hidden states.)
+               shape: (F_in, F_out(F_outputs))
+        """
+        if w2 is None:
+            w2 = w1
+        h1 = K.dot(x, w1)  # (B, N, F_out)
+        h2 = K.dot(x, w2)  # (B, N, F_out)
+        hh = K.batch_dot(h1, h2, axes=(2, 2))  # (B, N, N)
+        return K.sigmoid(hh)  # (B, N, N)
+
     def call(self, inputs, training=None):
         """
         Args:
@@ -226,17 +227,17 @@ class GraphConv(_ParametricLayer):
         # graph gate
         if self.use_gate:
             if self.gate_mode == 'single_weight':
-                graph = graph * self._graph_gate(seq_data, self.gate_w1)
+                graph = graph * self.__graph_gate(seq_data, self.gate_w1)
             else:
                 graph = graph * \
-                    self._graph_gate(seq_data, self.gate_w1, self.gate_w2)
+                    self.__graph_gate(seq_data, self.gate_w1, self.gate_w2)
 
         # beta (edge)
         beta = K.dot(seq_data, self.e_weight)
         if self.use_gat:
             att_alpha = \
-                self._graph_attention(graph, seq_data, self.att_w_weight,
-                                      self.att_a_weight, n_heads=self.gat_n_heads)
+                self.__graph_attention(graph, seq_data, self.att_w_weight,
+                                       self.att_a_weight, n_heads=self.gat_n_heads)
             list_att_beta = []
             for i in range(self.gat_n_heads):
                 att_beta = K.batch_dot(att_alpha[:, :, :, i], beta, axes=(2, 1))
@@ -258,6 +259,7 @@ class GraphConv(_ParametricLayer):
     def compute_output_shape(self, input_shape):
         return (input_shape[0][0], input_shape[0][1], self.units)
 
+a
 
 class GraphRNN(_ParametricLayer):
     """
