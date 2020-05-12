@@ -9,7 +9,6 @@ from .graph import GraphConv, GraphRNN, GraphRRNN
 from keras.backend import backend
 
 if backend() == 'tensorflow':
-    from .merge import SparseDot
     from .core_sparse_tf import *
 
 

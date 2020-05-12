@@ -5,13 +5,14 @@ Customized Core Keras layers.
 import types as python_types
 import warnings
 
-from keras import backend as K
-from keras.engine.base_layer import Layer
-from keras.utils.generic_utils import func_dump
-from keras.utils.generic_utils import func_load
-from keras.utils.generic_utils import deserialize_keras_object
-from keras.utils.generic_utils import has_arg
-from keras.legacy import interfaces
+# from keras import backend as K
+import tensorflow.keras.backend as K
+
+from tensorflow.keras.layers import Layer
+from tensorflow.python.keras.utils.generic_utils import func_dump
+from tensorflow.python.keras.utils.generic_utils import func_load
+from tensorflow.python.keras.utils.generic_utils import deserialize_keras_object
+from tensorflow.python.keras.utils.generic_utils import has_arg
 
 
 class SparsableLayer(Layer):
@@ -92,7 +93,6 @@ class Lambda(SparsableLayer):
         (or auto-inferred when using TensorFlow or CNTK).
     """
 
-    @interfaces.legacy_lambda_support
     def __init__(self, function, output_shape=None,
                  mask=None, arguments=None, **kwargs):
         # super(Lambda, self).__init__(**kwargs)
@@ -237,3 +237,8 @@ class Lambda(SparsableLayer):
         config['output_shape'] = output_shape
         return cls(**config)
 
+
+# most simple unit-test
+if __name__ == '__main__':
+    SparsableLayer()
+    Lambda(lambda x: x)

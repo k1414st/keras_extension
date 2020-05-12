@@ -1,14 +1,18 @@
 import numpy as np
 from scipy.sparse.csr import csr_matrix
-from keras.layers import Input, Flatten, Embedding, Dense, Lambda
-from keras.models import Model
+from tensorflow.keras.layers import Input, Flatten, Embedding, Dense, Lambda
+from tensorflow.keras.models import Model
 import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
 
 from keras_extension.layers import SparseReshapeDot
 
+
 SPARSITY = 0.01
-N_DATA = 100
-BATCH_SIZE = 2
+# N_DATA = 100
+# BATCH_SIZE = 2
+N_DATA = 20
+BATCH_SIZE = 20
 DIM_SPARSE = 2**16
 N_EPOCH = 5
 
@@ -17,7 +21,7 @@ N_EPOCH = 5
 
 def get_model():
     """ get sparse dot model """
-    input_layer = Input(shape=(DIM_SPARSE,), sparse=True)
+    input_layer = Input(batch_shape=(BATCH_SIZE, DIM_SPARSE,), sparse=True)
     input_c = Input(shape=(1,))
     
     e = input_c
@@ -48,7 +52,7 @@ c = np.random.randint(0, 7, size=(N_DATA, 1)) / 7
 def test_dot():
     """ test of dot model """
     model = get_model()
-    model.fit([x_sp, c], y, batch_size=BATCH_SIZE, epochs=N_EPOCH)
+    model.fit([x_sp, c], y, batch_size=BATCH_SIZE, steps_per_epoch=N_EPOCH)
     return True
 
 if __name__ == '__main__':

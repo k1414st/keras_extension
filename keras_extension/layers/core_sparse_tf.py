@@ -3,17 +3,22 @@
 Customized Core Keras layers.
 for tensorflow backend.
 """
-from keras import backend as K
-from keras import activations
-from keras import initializers
-from keras import regularizers
-from keras import constraints
-from keras.engine.base_layer import InputSpec
-from keras.engine.base_layer import Layer
-from keras.legacy import interfaces
-from keras.layers.merge import _Merge
-
 import tensorflow as tf
+from tensorflow.python.keras import backend as K
+
+from tensorflow.python.keras import activations
+from tensorflow.python.keras import initializers
+from tensorflow.python.keras import regularizers
+from tensorflow.python.keras import constraints
+# from tensorflow.python.keras.layers import Layer
+# from tensorflow.python.keras.layers import InputSpec
+from tensorflow.python.keras.engine.base_layer import Layer
+from tensorflow.python.keras.engine.input_spec import InputSpec
+from tensorflow.python.keras.layers.merge import _Merge
+
+from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import tensor_shape
+
 from .core_sparse import SparsableLayer
 
 
@@ -34,7 +39,7 @@ class Dense(SparsableLayer):
     Note: if the input to the layer has a rank greater than 2, then
     it is flattened prior to the initial dot product with `kernel`.
 
-    # Example
+    Example
 
     ```python
         # as first layer in a sequential model:
@@ -74,18 +79,18 @@ class Dense(SparsableLayer):
             (see [constraints](../constraints.md)).
 
     # Input shape
-        nD tensor with shape: `(batch_size, ..., input_dim)`.
+        N-D tensor with shape: `(batch_size, ..., input_dim)`.
         The most common situation would be
         a 2D input with shape `(batch_size, input_dim)`.
 
     # Output shape
-        nD tensor with shape: `(batch_size, ..., units)`.
+        N-D tensor with shape: `(batch_size, ..., units)`.
         For instance, for a 2D input with shape `(batch_size, input_dim)`,
         the output would have shape `(batch_size, units)`.
     """
 
-    @interfaces.legacy_dense_support
-    def __init__(self, units,
+    def __init__(self,
+                 units,
                  activation=None,
                  use_bias=True,
                  kernel_initializer='glorot_uniform',
@@ -99,49 +104,70 @@ class Dense(SparsableLayer):
                  **kwargs):
         if 'input_shape' not in kwargs and 'input_dim' in kwargs:
             kwargs['input_shape'] = (kwargs.pop('input_dim'),)
-        super().__init__(**kwargs)
-        self.units = units
+        # super().__init__(**kwargs)
+        # self.units = units
+        super().__init__(
+                activity_regularizer=regularizers.get(activity_regularizer), **kwargs)
+        self.units = int(units) if not isinstance(units, int) else units
         self.activation = activations.get(activation)
         self.use_bias = use_bias
         self.kernel_initializer = initializers.get(kernel_initializer)
         self.bias_initializer = initializers.get(bias_initializer)
         self.kernel_regularizer = regularizers.get(kernel_regularizer)
         self.bias_regularizer = regularizers.get(bias_regularizer)
-        self.activity_regularizer = regularizers.get(activity_regularizer)
+        # self.activity_regularizer = regularizers.get(activity_regularizer)
         self.kernel_constraint = constraints.get(kernel_constraint)
         self.bias_constraint = constraints.get(bias_constraint)
+        self.supports_masking = True
         if sparse:
             self.input_spec = InputSpec()
         else:
             self.input_spec = InputSpec(min_ndim=2)
-        self.supports_masking = True
 
     def build(self, input_shape):
+        print(input_shape)
         assert len(input_shape) >= 2
-        input_dim = input_shape[-1]
+        # input_dim = input_shape[-1]
+        dtype = dtypes.as_dtype(self.dtype or K.floatx())
+        if not (dtype.is_floating or dtype.is_complex):
+            raise TypeError('Unable to build `Dense` layer with non-floating point '
+                            'dtype %s' % (dtype,))
+        input_shape = tensor_shape.TensorShape(input_shape)
+        if tensor_shape.dimension_value(input_shape[-1]) is None:
+            raise ValueError('The last dimension of the inputs to `Dense` '
+                             'should be defined. Found `None`.')
+        last_dim = tensor_shape.dimension_value(input_shape[-1])
+        if self._is_sparse:
+            print('is sparse')
+            self.input_spec = InputSpec(axes={-1: last_dim})
+        else:
+            print('is not sparse')
+            self.input_spec = InputSpec(min_ndim=2, axes={-1: last_dim})
 
-        self.kernel = self.add_weight(shape=(input_dim, self.units),
-                                      initializer=self.kernel_initializer,
-                                      name='kernel',
-                                      regularizer=self.kernel_regularizer,
-                                      constraint=self.kernel_constraint)
+        self.kernel = self.add_weight(
+            name='kernel',
+            shape=(last_dim, self.units),
+            initializer=self.kernel_initializer,
+            regularizer=self.kernel_regularizer,
+            constraint=self.kernel_constraint,
+            dtype=self.dtype,
+            trainable=True)
         if self.use_bias:
-            self.bias = self.add_weight(shape=(self.units,),
-                                        initializer=self.bias_initializer,
-                                        name='bias',
-                                        regularizer=self.bias_regularizer,
-                                        constraint=self.bias_constraint)
+            self.bias = self.add_weight(
+                name='bias',
+                shape=(self.units,),
+                initializer=self.bias_initializer,
+                regularizer=self.bias_regularizer,
+                constraint=self.bias_constraint,
+                dtype=self.dtype,
+                trainable=True)
         else:
             self.bias = None
-        if self._is_sparse:
-            self.input_spec = InputSpec(axes={-1: input_shape[-1]})
-        else:
-            self.input_spec = InputSpec(min_ndim=2, axes={-1: input_shape[-1]})
         self.built = True
 
     def call(self, inputs):
         if self._is_sparse:
-            output = tf.sparse.matmul(inputs, self.kernel)
+            output = tf.sparse.sparse_dense_matmul(inputs, self.kernel)
         else:
             output = K.dot(inputs, self.kernel)
         if self.use_bias:
@@ -188,7 +214,6 @@ class SparseReshapeDense(Dense):
         Densed Tensor: (batch_size, *reshape[-1:], dense.units)
     """
 
-    @interfaces.legacy_dense_support
     def __init__(self, units,
                  reshape,
                  activation=None,
@@ -243,7 +268,7 @@ class SparseReshapeDense(Dense):
         self.built = True
 
     def call(self, inputs):
-        output = super().call(tf.sparse_reshape(inputs, (-1, self.reshape[-1])))
+        output = super().call(tf.sparse.reshape(inputs, (-1, self.reshape[-1])))
         output_shape = [-1] + list(self.reshape)
         output_shape[-1] = self.units
         output = tf.reshape(output, output_shape)
@@ -298,8 +323,8 @@ class SparseReshapeDot(_Merge):
                              'on exactly 2 inputs')
         x1 = inputs[0]
         x2 = inputs[1]
-        x1 = tf.sparse_reshape(x1, (-1, self.reshape[-1]))
-        output = tf.sparse.matmul(x1, x2)
+        x1 = tf.sparse.reshape(x1, (-1, self.reshape[-1]))
+        output = tf.sparse.sparse_dense_matmul(x1, x2)
         output = K.reshape(output, [-1] + list(self.__output_shape[1:]))
         return output
 
@@ -319,3 +344,4 @@ class SparseReshapeDot(_Merge):
         }
         base_config = super(SparseReshapeDot, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
+
