@@ -10,8 +10,6 @@ from tensorflow.python.keras import activations
 from tensorflow.python.keras import initializers
 from tensorflow.python.keras import regularizers
 from tensorflow.python.keras import constraints
-# from tensorflow.python.keras.layers import Layer
-# from tensorflow.python.keras.layers import InputSpec
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.keras.layers.merge import _Merge
@@ -104,8 +102,6 @@ class Dense(SparsableLayer):
                  **kwargs):
         if 'input_shape' not in kwargs and 'input_dim' in kwargs:
             kwargs['input_shape'] = (kwargs.pop('input_dim'),)
-        # super().__init__(**kwargs)
-        # self.units = units
         super().__init__(
                 activity_regularizer=regularizers.get(activity_regularizer), **kwargs)
         self.units = int(units) if not isinstance(units, int) else units
@@ -115,7 +111,6 @@ class Dense(SparsableLayer):
         self.bias_initializer = initializers.get(bias_initializer)
         self.kernel_regularizer = regularizers.get(kernel_regularizer)
         self.bias_regularizer = regularizers.get(bias_regularizer)
-        # self.activity_regularizer = regularizers.get(activity_regularizer)
         self.kernel_constraint = constraints.get(kernel_constraint)
         self.bias_constraint = constraints.get(bias_constraint)
         self.supports_masking = True
@@ -125,9 +120,7 @@ class Dense(SparsableLayer):
             self.input_spec = InputSpec(min_ndim=2)
 
     def build(self, input_shape):
-        print(input_shape)
         assert len(input_shape) >= 2
-        # input_dim = input_shape[-1]
         dtype = dtypes.as_dtype(self.dtype or K.floatx())
         if not (dtype.is_floating or dtype.is_complex):
             raise TypeError('Unable to build `Dense` layer with non-floating point '
@@ -138,10 +131,8 @@ class Dense(SparsableLayer):
                              'should be defined. Found `None`.')
         last_dim = tensor_shape.dimension_value(input_shape[-1])
         if self._is_sparse:
-            print('is sparse')
             self.input_spec = InputSpec(axes={-1: last_dim})
         else:
-            print('is not sparse')
             self.input_spec = InputSpec(min_ndim=2, axes={-1: last_dim})
 
         self.kernel = self.add_weight(

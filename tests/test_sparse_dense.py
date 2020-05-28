@@ -70,6 +70,6 @@ def test_dense_fold():
 
 
 if __name__ == '__main__':
-    # test_dense_nosparse()
+    test_dense_nosparse()
     test_dense_sparse()
     test_dense_fold()
